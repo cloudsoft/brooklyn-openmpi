@@ -1,11 +1,14 @@
 package MPI;
 
+import brooklyn.entity.basic.Attributes;
+import brooklyn.entity.basic.EntityInternal;
 import brooklyn.entity.basic.EntityLocal;
 import brooklyn.entity.basic.VanillaSoftwareProcessSshDriver;
 import brooklyn.event.basic.DependentConfiguration;
 import brooklyn.location.basic.SshMachineLocation;
 import brooklyn.util.ssh.BashCommands;
 import brooklyn.util.stream.Streams;
+import brooklyn.util.text.Strings;
 import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
@@ -61,11 +64,31 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
     public void launch() {
         //super.launch();
 
-        if (Boolean.FALSE.equals(entity.getAttribute(MPINode.MASTER_FLAG)))
+
+        entity.setConfig(MPINode.MPI_MASTER,DependentConfiguration.attributeWhenReady(getEntity().getParent(), MPICluster.MASTER_NODE));
+
+        //if entity is master..
+        if (Boolean.TRUE.equals(entity.getAttribute(MPINode.MASTER_FLAG)))
         {
-            log.info("Entity: " + entity.getId() + " is not master copying Ssh key from master");
-            entity.setConfig(MPINode.MPI_MASTER,DependentConfiguration.attributeWhenReady(getEntity().getParent(), MPICluster.MASTER_NODE));
+            log.info("Entity: {} is master now generateing Ssh key", entity.getId());
+            setMasterSshKey();
+
+            ((EntityInternal) getEntity().getParent()).setAttribute(MPICluster.MASTER_SSH_KEY_GENERATED, true);
+
+            updateHostsFile();
+
+        }
+
+        else
+        {
+
+            //wait for master ssh key to be set before executing.
+
+            entity.setConfig(MPINode.MASTER_KEY_GENERATED,DependentConfiguration.attributeWhenReady(getEntity().getParent(),MPICluster.MASTER_SSH_KEY_GENERATED));
+            log.info("Entity: {} is not master copying Ssh key from master {}", entity.getId(),entity.getParent().getAttribute(MPICluster.MASTER_NODE).getId());
+
             setSshKeyFromMaster();
+            updateHostsFile();
         }
 
     }
@@ -92,40 +115,62 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
     {
         log.info("updateHostsFile invoked");
 
-        getMachine().copyTo(getMPIHostsToCopy(), getRunDir() + "/mpi_hosts");
+        getMachine().copyTo(getMPIHostsToCopy(), "mpi_hosts");
 
     }
 
     private InputStream getMPIHostsToCopy()
     {
-       
-        List<String> mpiHosts = getEntity().getAttribute(MPINode.MPI_HOSTS);
-        StringBuilder strB = new StringBuilder();
 
-        for (String host : mpiHosts)
+        if (getEntity().getAttribute(MPINode.MPI_HOSTS) != null )
         {
-            strB.append(host + "\n");
+            List<String> mpiHosts = getEntity().getAttribute(MPINode.MPI_HOSTS);
+            return Streams.newInputStreamWithContents(Strings.join(mpiHosts,"\n"));
         }
+        else
+            return Streams.newInputStreamWithContents("");
 
-        String str = strB.toString();
-
-        return Streams.newInputStreamWithContents(str);
         //return new ByteArrayInputStream(str.getBytes(Charset.forName("UTF-8")));
     }
 
     private void setSshKeyFromMaster()
     {
-        MPINode master = entity.getConfig(MPINode.MPI_MASTER);
-        SshMachineLocation master_machine = (SshMachineLocation) Iterables.filter(master.getLocations(),SshMachineLocation.class);
+        MPINode master = getEntity().getParent().getAttribute(MPICluster.MASTER_NODE);
+        SshMachineLocation master_machine = (SshMachineLocation) Iterables.find(master.getLocations(), Predicates.instanceOf(SshMachineLocation.class));
 
+        log.info("Copying authorized_keys from master {} to slave {}", master.getId(), entity.getId());
 
-        log.info("Copying authorized_keys from master {} to slave {}" , master.getId(), entity.getId());
-        master_machine.copyFrom("~/.ssh/authorized_keys","authorized_keys");
+        //copy rsa files across from master to local
+        master_machine.copyFrom("auth_keys.txt", "pubauthkeys.txt");
+        master_machine.copyFrom("id.txt", "pubauthid.txt");
 
-        log.info("Removing strict hosting in slave {}",entity.getId());
-        getMachine().execCommands("remove strict hosting", ImmutableList.of(BashCommands.executeCommandThenAsUserTeeOutputToFile("echo \"StrictHostKeyChecking no\"", "root", "/etc/ssh/ssh_config")));
+        //send files from local to slave
+        getMachine().copyTo(new File("pubauthkeys.txt"), "id_rsa.pub");
+        master_machine.copyTo(new File("pubauthid.txt"), "id_rsa");
 
-        getMachine().copyTo(new File("authorized_keys"),"~/.ssh/authorized_keys");
+        getMachine().execCommands("remove strict hosting", ImmutableList.of(
+                "chmod 700 ~/.ssh",
+                BashCommands.executeCommandThenAsUserTeeOutputToFile("echo \"StrictHostKeyChecking no\"", "root", "/etc/ssh/ssh_config")   ,
+                "cat id_rsa >> ~/.ssh/id_rsa",
+                "cat id_rsa.pub >> ~/.ssh/id_rsa.pub",
+                "cat id_rsa.pub >> ~/.ssh/authorized_keys",
+                "chmod 600 ~/.ssh/authorized_keys"));
+    }
+
+    private void setMasterSshKey() {
+
+        log.info("generating the master node ssh key");
+        entity.setConfig(MPINode.MASTER_KEY_GENERATED,true);
+        getMachine().execCommands("setMasterSshKey",
+                ImmutableList.of(
+                        "chmod 700 ~/.ssh",
+                        BashCommands.executeCommandThenAsUserTeeOutputToFile("echo \"StrictHostKeyChecking no\"", "root", "/etc/ssh/ssh_config"),
+                        "ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -C \"Open MPI\" -P \"\"",
+                        "cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys",
+                        "chmod 600 ~/.ssh/authorized_keys",
+                        "cp ~/.ssh/id_rsa.pub auth_keys.txt",
+                        "cp ~/.ssh/id_rsa id.txt"));
+
 
     }
 }

@@ -26,7 +26,7 @@ public interface MPINode extends SoftwareProcess {
     BasicAttributeSensorAndConfigKey<Boolean> MASTER_FLAG = new BasicAttributeSensorAndConfigKey<Boolean>(Boolean.class,"mpinode.master_flag","flags a random node to be the master node",Boolean.FALSE);
 
     ConfigKey<MPINode> MPI_MASTER = ConfigKeys.newConfigKey(MPINode.class,"mpi.master.node");
-
+    ConfigKey<Boolean> MASTER_KEY_GENERATED = ConfigKeys.newConfigKey(Boolean.class,"mpi.master.key.generated");
     AttributeSensor<List<String>> MPI_HOSTS = Sensors.newSensor(new TypeToken<List<String>>(){},"mpinode.mpihosts","A list of all mpi hosts in the cluster");
 //    public void setMasterSshKey();
 //    public void copyMasterSshKeyToSlaves(List<String> hostnames);
@@ -35,4 +35,7 @@ public interface MPINode extends SoftwareProcess {
 
     @Effector(description = "update the mpi_hosts file")
     public void updateHostsFile();
+
+//    @Effector(description = "sends a file")
+//    public void sendFile(String url);
 }
