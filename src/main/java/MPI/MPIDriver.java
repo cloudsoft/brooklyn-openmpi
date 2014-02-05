@@ -9,7 +9,5 @@ import java.lang.String;import java.util.List;
  */
 public interface MPIDriver extends SoftwareProcessDriver {
 
-    public void updateHostnames(List<String> hostnamesList);
-
-    public void setAndFetchMasterSshKey();
+    public void updateHostsFile();
 }

@@ -2,6 +2,8 @@ package MPI;
 
 import brooklyn.entity.basic.SoftwareProcessImpl;
 
+import java.util.List;
+
 /**
  * Created by zaid.mohsin on 04/02/2014.
  */
@@ -17,8 +19,9 @@ public class MPINodeImpl extends SoftwareProcessImpl implements MPINode {
         super.init();
     }
 
+
     @Override
-    public void setAndFetchMasterSshKey() {
-        ((MPIDriver)getDriver()).setAndFetchMasterSshKey();
+    public void updateHostsFile() {
+        ((MPIDriver)getDriver()).updateHostsFile();
     }
 }
