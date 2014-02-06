@@ -10,4 +10,5 @@ import java.lang.String;import java.util.List;
 public interface MPIDriver extends SoftwareProcessDriver {
 
     public void updateHostsFile();
+    public void simpleCompile(String url);
 }

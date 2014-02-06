@@ -1,5 +1,6 @@
 package MPI;
 
+import brooklyn.entity.annotation.EffectorParam;
 import brooklyn.entity.basic.SoftwareProcessImpl;
 
 import java.util.List;
@@ -23,5 +24,12 @@ public class MPINodeImpl extends SoftwareProcessImpl implements MPINode {
     @Override
     public void updateHostsFile() {
         ((MPIDriver)getDriver()).updateHostsFile();
+    }
+
+    @Override
+    public void simpleCompile(String url) {
+
+        ((MPIDriver)getDriver()).simpleCompile(url);
+
     }
 }

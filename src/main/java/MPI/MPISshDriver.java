@@ -19,6 +19,8 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
@@ -113,16 +115,23 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
     @Override
     public void updateHostsFile()
     {
+        try{
+
         log.info("updateHostsFile invoked");
 
-        getMachine().copyTo(getMPIHostsToCopy(), "mpi_hosts");
+        if (getEntity().getAttribute(MPINode.MPI_HOSTS) != null)
+            getMachine().copyTo(getMPIHostsToCopy(), "mpi_hosts");
+        }
+        catch(NullPointerException n)
+        {
 
+        }
     }
 
     private InputStream getMPIHostsToCopy()
     {
 
-        if (getEntity().getAttribute(MPINode.MPI_HOSTS) != null )
+        if (getEntity().getAttribute(MPINode.MPI_HOSTS) != null)
         {
             List<String> mpiHosts = getEntity().getAttribute(MPINode.MPI_HOSTS);
             return Streams.newInputStreamWithContents(Strings.join(mpiHosts,"\n"));
@@ -145,16 +154,17 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
         master_machine.copyFrom("id.txt", "pubauthid.txt");
 
         //send files from local to slave
-        getMachine().copyTo(new File("pubauthkeys.txt"), "id_rsa.pub");
-        master_machine.copyTo(new File("pubauthid.txt"), "id_rsa");
+        getMachine().copyTo(new File("pubauthkeys.txt"), "id_rsa.pub.txt");
+        master_machine.copyTo(new File("pubauthid.txt"), "id_rsa.txt");
 
         getMachine().execCommands("remove strict hosting", ImmutableList.of(
-                "chmod 700 ~/.ssh",
+                "chmod 700 ~/.ssh/",
                 BashCommands.executeCommandThenAsUserTeeOutputToFile("echo \"StrictHostKeyChecking no\"", "root", "/etc/ssh/ssh_config")   ,
-                "cat id_rsa >> ~/.ssh/id_rsa",
-                "cat id_rsa.pub >> ~/.ssh/id_rsa.pub",
-                "cat id_rsa.pub >> ~/.ssh/authorized_keys",
-                "chmod 600 ~/.ssh/authorized_keys"));
+                "cat id_rsa.txt >> ~/.ssh/id_rsa",
+                "cat id_rsa.pub.txt >> ~/.ssh/id_rsa.pub",
+                "cat id_rsa.pub.txt >> ~/.ssh/authorized_keys",
+                "chmod 600 ~/.ssh/authorized_keys",
+                "chmod 600 ~/.ssh/id_rsa"));
     }
 
     private void setMasterSshKey() {
@@ -169,8 +179,26 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
                         "cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys",
                         "chmod 600 ~/.ssh/authorized_keys",
                         "cp ~/.ssh/id_rsa.pub auth_keys.txt",
-                        "cp ~/.ssh/id_rsa id.txt"));
+                        "cp ~/.ssh/id_rsa id.txt",
+                        "chmod 600 ~/.ssh/id_rsa"));
 
 
+    }
+
+    @Override
+    public void simpleCompile(String inputUrl)
+    {
+        URL url;
+        try {
+            url = new URL(inputUrl);
+
+            String cfile = inputUrl.substring(url.getPath().lastIndexOf("/") + 1);
+            String ofile = cfile.substring(0, cfile.lastIndexOf(".")); 
+            getMachine().execCommands("getting and compiling a file",ImmutableList.of(
+                    "wget " + inputUrl,
+                    "mpicc " + cfile + " -o " + ofile));
+        } catch (MalformedURLException e) {
+            log.debug("bad url entered {} ", inputUrl);
+        }
     }
 }

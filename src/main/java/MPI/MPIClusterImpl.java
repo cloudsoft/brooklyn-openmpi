@@ -142,6 +142,13 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
         return super.resize(desiredSize);
     }
 
+    @Override
+    public void simpleCompile(@EffectorParam(name = "fileurl") String url) {
+
+        for (MPINode member: Iterables.filter(getChildren(),MPINode.class))
+            Entities.invokeEffectorWithArgs(this,member,MPINode.SIMPLE_COMPILE,url);
+    }
+
     //compiles and runs a c/c++ program through Open MPI
 //    @Override
 //    public void compileAndRun(@EffectorParam(name = "fileurl", description = "url of .c file") String url) {
