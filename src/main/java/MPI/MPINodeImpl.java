@@ -15,21 +15,29 @@ public class MPINodeImpl extends SoftwareProcessImpl implements MPINode {
     }
 
     @Override
-    public void init()
-    {
+    public void init() {
         super.init();
     }
 
+    @Override
+    protected void connectSensors() {
+        super.connectSensors();
+        connectServiceUpIsRunning();
+    }
 
     @Override
-    public void updateHostsFile() {
-        ((MPIDriver)getDriver()).updateHostsFile();
+    protected void disconnectSensors() {
+        super.disconnectSensors();
+        disconnectServiceUpIsRunning();
+    }
+
+    @Override
+    public void updateHostsFile(List<String> mpiHosts) {
+        ((MPIDriver)getDriver()).updateHostsFile(mpiHosts);
     }
 
     @Override
     public void simpleCompile(String url) {
-
         ((MPIDriver)getDriver()).simpleCompile(url);
-
     }
 }
