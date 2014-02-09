@@ -35,11 +35,9 @@ public interface MPICluster extends DynamicCluster {
     public static final AttributeSensor<Boolean> MASTER_SSH_KEY_GENERATED = Sensors.newBooleanSensor("mpicluster.master_ssh_key_generated","senses if the master node SSH key has been configured");
     public static final AttributeSensor<MPINode> MASTER_NODE = Sensors.newSensor(MPINode.class,"mpicluster.masternode","the master node for the cluster");
 
-    MethodEffector<Void> SIMPLE_COMPILE = new MethodEffector<Void>(MPICluster.class,"simpleCompile");
-//    MethodEffector<Void> COMPILE_AND_RUN = new MethodEffector<Void>(Void.class,"compileAndRun");
+    MethodEffector<Void> RUN_RAY_TRACING = new MethodEffector<Void>(MPICluster.class,"runRayTracingDemo");
 
-//    @Effector(description="compiles and runs a file from url specified")
-//    public void compileAndRun(@EffectorParam(name="url",description="url of .c file") String url);
-    @Effector(description = "gets and compiles a file on all MPI nodes")
-    void simpleCompile(@EffectorParam(name="url") String url);
+    AttributeSensor<Boolean> RAY_TRACING_DEMO_INSTALLED = Sensors.newBooleanSensor("mpiccluster.raytracing.demo.installed","flag to indicate if the ray tracing demo has been installed");
+    @Effector(description = "Installs and runs a ray tracing app on my Open-MPI cluster")
+    void runRayTracingDemo(@EffectorParam(name="numOfNodes", description="the number of nodes I want to run the demo.") Integer numOfNodes);
 }

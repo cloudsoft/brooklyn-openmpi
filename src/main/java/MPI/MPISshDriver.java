@@ -113,7 +113,6 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
 
     @Override
     public void updateHostsFile(List<String> mpiHosts) {
-        log.info("updateHostsFile invoked");
 
         getMachine().copyTo(Streams.newInputStreamWithContents(Strings.join(mpiHosts, "\n")), "mpi_hosts");
     }
