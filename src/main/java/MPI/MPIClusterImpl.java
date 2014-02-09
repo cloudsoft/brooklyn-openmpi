@@ -221,7 +221,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
                 execScript("Executing the demo",
                         ImmutableList.of(String.format("mpirun -np %s --hostfile ~/mpi_hosts ~/tachyon/compile/linux-mpi/tachyon ~/tachyon/scenes/teapot.dat -format BMP -o teapot.%s.bmp > " +
                                 "~/raytraceout.%s",
-                                numOfNodes,numOfNodes)));
+                                numOfNodes,numOfNodes,numOfNodes)));
 
         log.info("copying results to local machine: {}","raytraceout."+numOfNodes);
         masterLocation.copyFrom("raytraceout."+numOfNodes,"raytraceout."+numOfNodes);
