@@ -6,6 +6,7 @@ import brooklyn.entity.basic.Entities;
 import brooklyn.entity.basic.EntityInternal;
 import brooklyn.entity.group.AbstractMembershipTrackingPolicy;
 import brooklyn.entity.group.DynamicClusterImpl;
+import brooklyn.entity.software.SshEffectorTasks;
 import brooklyn.entity.trait.Startable;
 import brooklyn.event.SensorEvent;
 import brooklyn.event.SensorEventListener;
@@ -13,7 +14,9 @@ import brooklyn.location.Location;
 import brooklyn.location.basic.SshMachineLocation;
 import brooklyn.util.collections.MutableMap;
 import brooklyn.util.ssh.BashCommands;
+import brooklyn.util.task.DynamicTasks;
 import com.google.common.base.Function;
+import com.google.common.base.Joiner;
 import com.google.common.base.Optional;
 import com.google.common.base.Predicates;
 import com.google.common.collect.*;
@@ -200,7 +203,6 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
                 loc.execScript("installing Ray Tracing app",
                         ImmutableList.of(BashCommands.commandToDownloadUrlAs(
                                 "http://jedi.ks.uiuc.edu/~johns/raytracer/files/0.99b2/tachyon-0.99b2.tar.gz", "tachyon.tar.gz"),
-                                BashCommands.INSTALL_TAR,
                                 "tar xvfz tachyon.tar.gz",
                                 "cd tachyon/unix",
                                 "make linux-mpi"));
@@ -223,8 +225,14 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
                                 "~/raytraceout.%s",
                                 numOfNodes,numOfNodes,numOfNodes)));
 
-        log.info("copying results to local machine: {}","raytraceout."+numOfNodes);
-        masterLocation.copyFrom("raytraceout."+numOfNodes,"raytraceout."+numOfNodes);
+//        DynamicTasks.queueIfPossible(SshEffectorTasks.ssh(ImmutableList.of(String.format("mpirun -np %s --hostfile ~/mpi_hosts ~/tachyon/compile/linux-mpi/tachyon ~/tachyon/scenes/teapot.dat -format BMP -o teapot.%s.bmp > " +
+//                "~/raytraceout.%s",numOfNodes,numOfNodes,numOfNodes)))
+//                .machine(masterLocation)
+//                .summary("Running the teapot ray tracing benchmark."))
+//        .orSubmitAndBlock(masterNode);
+
+        log.info("copying results to local machine: {}","raytraceout."+numOfNodes+"."+masterLocation.getId());
+        masterLocation.copyFrom("raytraceout."+numOfNodes,"raytraceout."+numOfNodes+"."+masterLocation.getId());
         log.info("fetching the teapot");
         masterLocation.copyFrom("teapot."+numOfNodes+".bmp","teapot."+numOfNodes+".bmp");
 
