@@ -14,7 +14,7 @@ public class MPIExample extends AbstractApplication {
 
     @CatalogConfig(label="Initial Cluster Size (per location)", priority=1)
     public static final ConfigKey<Integer> MPI_CLUSTER_SIZE = ConfigKeys.newConfigKey(
-            "cassandra.cluster.initialSize", "Initial size of the Cassandra clusterss", 2);
+            "cassandra.cluster.initialSize", "Initial size of the Cassandra clusterss", 4);
 
     public void init()
     {

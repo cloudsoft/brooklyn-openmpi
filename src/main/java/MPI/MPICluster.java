@@ -1,10 +1,8 @@
 package MPI;
 
-import brooklyn.config.ConfigKey;
 import brooklyn.entity.Entity;
 import brooklyn.entity.annotation.Effector;
 import brooklyn.entity.annotation.EffectorParam;
-import brooklyn.entity.basic.ConfigKeys;
 import brooklyn.entity.basic.MethodEffector;
 import brooklyn.entity.group.DynamicCluster;
 import brooklyn.entity.proxying.ImplementedBy;
@@ -12,12 +10,8 @@ import brooklyn.event.AttributeSensor;
 import brooklyn.event.basic.Sensors;
 import com.google.common.reflect.TypeToken;
 
-import java.util.List;
 import java.util.Map;
 
-/**
- * Created by zaid.mohsin on 04/02/2014.
- */
 
 @ImplementedBy(MPIClusterImpl.class)
 public interface MPICluster extends DynamicCluster {

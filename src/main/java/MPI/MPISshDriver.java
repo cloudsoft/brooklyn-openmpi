@@ -1,21 +1,17 @@
 package MPI;
 
 import brooklyn.entity.Entity;
-import brooklyn.entity.basic.Entities;
 import brooklyn.entity.basic.EntityInternal;
 import brooklyn.entity.basic.EntityLocal;
 import brooklyn.entity.basic.VanillaSoftwareProcessSshDriver;
-import brooklyn.entity.software.OsTasks;
 import brooklyn.event.AttributeSensor;
 import brooklyn.event.basic.DependentConfiguration;
-import brooklyn.location.OsDetails;
 import brooklyn.location.basic.SshMachineLocation;
 import brooklyn.util.exceptions.Exceptions;
 import brooklyn.util.os.Os;
 import brooklyn.util.ssh.BashCommands;
 import brooklyn.util.stream.Streams;
 import brooklyn.util.task.Tasks;
-import brooklyn.util.text.Identifiers;
 import brooklyn.util.text.Strings;
 import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableList;
@@ -31,9 +27,6 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Created by zaid.mohsin on 04/02/2014.
- */
 public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPIDriver {
 
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(MPISshDriver.class);
@@ -47,7 +40,7 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
     @Override
     public void install() {
         super.install();
-
+        // FIXME debian wheezy didn't run apt-get without exporting the PATH first.
         String debianFix = "export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
         List<String> installCmds = Lists.newArrayList(
                 debianFix,
@@ -59,14 +52,6 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
                 BashCommands.installPackage("libopenmpi-dev"),
                 BashCommands.commandToDownloadUrlAs("http://svn.open-mpi.org/svn/ompi/tags/v1.6-series/v1.6.4/examples/connectivity_c.c", connectivityTesterPath));
 
-
-        //OsDetails osDetails = Entities.submit(entity, OsTasks.getOsDetails(entity)).getUnchecked();
-
-        //if (osDetails.getName().equals("debian"))
-        //{
-        //    fixSudoers.addAll(installCmds);
-
-        //}
 
         connectivityTesterPath = Os.mergePathsUnix(getInstallDir(), "connectivity_c.c");
 
@@ -95,10 +80,10 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
 
     @Override
     public void launch() {
-        //super.launch();
 
 
-        //if entity is master..
+
+        //if entity is master generates the master ssh key and sets the master flag to be set.
         if (Boolean.TRUE.equals(entity.getAttribute(MPINode.MASTER_FLAG))) {
             log.info("Entity: {} is master now generateing Ssh key", entity.getId());
             String publicKey = generateSshKey();
@@ -117,10 +102,10 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
 
     @Override
     public boolean isRunning() {
-        //int result = newScript(CHECK_RUNNING)
-        //        .body.append("mpicc " + connectivityTesterPath + " -o connectivity") // FIXME
-        //        .body.append("mpirun ./connectivity")
-        //        .execute();
+        int result = newScript(CHECK_RUNNING)
+                .body.append("mpicc " + connectivityTesterPath + " -o connectivity") // FIXME
+                .body.append("mpirun ./connectivity")
+                .execute();
         return (true);
     }
 
@@ -132,18 +117,12 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
     @Override
     public void updateHostsFile(List<String> mpiHosts) {
 
-        getMachine().copyTo(Streams.newInputStreamWithContents(Strings.join(mpiHosts, "\n")), "mpi_hosts");
+            getMachine().copyTo(Streams.newInputStreamWithContents(Strings.join(mpiHosts, "\n")), "mpi_hosts");
     }
 
     private void uploadPublicKey(String publicKey) {
-        //log.info("Copying authorized_keys from master {} to slave {}", master.getId(), entity.getId());
 
-        //copy rsa files across from master to local
-        //master_machine.
-
-        //send files from local to slave
         try {
-
 
             byte[] encoded = Files.toByteArray(new File(publicKey));
             String myKey = Charsets.UTF_8.decode(ByteBuffer.wrap(encoded)).toString();
@@ -160,7 +139,6 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
                     .body.append("ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -C \"Open MPI\" -P \"\"")
                     .body.append("cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys")
                     .body.append("cat id_rsa.pub.txt >> ~/.ssh/authorized_keys")
-                    //.body.append("cat ~/.ssh/id_rsa.pub | ssh $USER@" + masterAddress + " \"mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys\"")
                     .body.append("chmod 600 ~/.ssh/authorized_keys")
                     .body.append("cp ~/.ssh/id_rsa.pub id_rsa.pub." + entity.getId())
                     .failOnNonZeroResultCode()
@@ -186,9 +164,10 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
 
     private String generateSshKey() {
 
-        log.info("generating the master node ssh key");
+        log.info("generating the master node ssh key on node: {}",entity.getId());
 
 
+        //disables StrictHostKeyCheck and generates the master node key to allow communication between the nodes
         newScript("generateSshKey")
                 .body.append("mkdir -p ~/.ssh/")
                 .body.append("chmod 700 ~/.ssh")
@@ -203,20 +182,6 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
         getMachine().copyFrom("auth_keys.txt", "auth_keys.txt");
 
         return "auth_keys.txt";
-    }
-
-    @Override
-    public void simpleCompile(String inputUrl) {
-        String cfile = inputUrl.substring(inputUrl.lastIndexOf("/") + 1);
-        if (Strings.isBlank(cfile)) cfile = Identifiers.makeRandomId(8) + ".c";
-        String ofile = (cfile.contains(".") ? cfile.substring(0, cfile.lastIndexOf(".")) : cfile) + ".o";
-
-        newScript("compileAndRun")
-                .body.append(BashCommands.commandsToDownloadUrlsAs(Lists.newArrayList(inputUrl), cfile))
-                .body.append("mpicc " + cfile + " -o " + ofile)
-                .body.append("mpirun " + ofile)
-                .failOnNonZeroResultCode()
-                .execute();
     }
 
     @SuppressWarnings("unchecked")

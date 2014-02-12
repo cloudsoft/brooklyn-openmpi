@@ -1,12 +1,10 @@
 package MPI;
 
 import brooklyn.entity.Entity;
-import brooklyn.entity.basic.Attributes;
 import brooklyn.entity.basic.Entities;
 import brooklyn.entity.basic.EntityInternal;
 import brooklyn.entity.group.AbstractMembershipTrackingPolicy;
 import brooklyn.entity.group.DynamicClusterImpl;
-import brooklyn.entity.software.SshEffectorTasks;
 import brooklyn.entity.trait.Startable;
 import brooklyn.event.SensorEvent;
 import brooklyn.event.SensorEventListener;
@@ -14,9 +12,7 @@ import brooklyn.location.Location;
 import brooklyn.location.basic.SshMachineLocation;
 import brooklyn.util.collections.MutableMap;
 import brooklyn.util.ssh.BashCommands;
-import brooklyn.util.task.DynamicTasks;
 import com.google.common.base.Function;
-import com.google.common.base.Joiner;
 import com.google.common.base.Optional;
 import com.google.common.base.Predicates;
 import com.google.common.collect.*;
@@ -31,9 +27,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static brooklyn.util.JavaGroovyEquivalents.groovyTruth;
 
-/**
- * Created by zaid.mohsin on 04/02/2014.
- */
 public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
 
     private static final Logger log = LoggerFactory.getLogger(MPIClusterImpl.class);
@@ -86,10 +79,10 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
 
                 log.info("Added new MPI member to {}: {}; {}", new Object[]{this, member, address});
 
-                log.info("Updating mpi_hosts to all members");
+                log.info("Updating mpi_hosts to master");
 
-                for (Entity node : nodes.keySet())
-                    Entities.invokeEffectorWithArgs(this, node, MPINode.UPDATE_HOSTS_FILE, Optional.of(Lists.newArrayList(nodes.values())).get());
+                MPINode masterNode = getAttribute(MPICluster.MASTER_NODE);
+                Entities.invokeEffectorWithArgs(this, masterNode, MPINode.UPDATE_HOSTS_FILE, Optional.of(Lists.newArrayList(nodes.values())).get());
 
 
             }
@@ -102,9 +95,8 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
 
                 log.info("Updating mpi_hosts to all members");
 
-                for (Entity node : nodes.keySet())
-                    Entities.invokeEffectorWithArgs(this, node, MPINode.UPDATE_HOSTS_FILE, Optional.of(Lists.newArrayList(nodes.values())).get());
-
+                MPINode masterNode = getAttribute(MPICluster.MASTER_NODE);
+                Entities.invokeEffectorWithArgs(this, masterNode, MPINode.UPDATE_HOSTS_FILE, Optional.of(Lists.newArrayList(nodes.values())).get());
             }
         }
         if (log.isTraceEnabled()) log.trace("Done {} checkEntity {}", this, member);
@@ -129,8 +121,6 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
     }
 
     protected void connectSensors() {
-//        Map<?, ?> policyFlags = MutableMap.of("name", "Controller targets tracker",
-//                "sensorsToTrack", ImmutableSet.of(MPINode.HOSTNAME));
 
         Map<String, Object> flags = MutableMap.<String, Object>builder()
                 .put("name", "Controller targets tracker")
@@ -218,23 +208,24 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
         MPINode masterNode = getAttribute(MPICluster.MASTER_NODE);
         SshMachineLocation masterLocation = (SshMachineLocation) Iterables.find(masterNode.getLocations(), Predicates.instanceOf(SshMachineLocation.class));
 
-        log.info("running the ray tracing benchmark with {} processes",numOfNodes);
+        log.info("running the ray tracing benchmark with {} processes", numOfNodes);
+        // TODO run different options for the ray tracing benchmark.
         masterLocation.
                 execScript("Executing the demo",
                         ImmutableList.of(String.format("mpirun -np %s --hostfile ~/mpi_hosts ~/tachyon/compile/linux-mpi/tachyon ~/tachyon/scenes/teapot.dat -format BMP -o teapot.%s.bmp > " +
                                 "~/raytraceout.%s",
-                                numOfNodes,numOfNodes,numOfNodes)));
+                                numOfNodes, numOfNodes, numOfNodes)));
 
 //        DynamicTasks.queueIfPossible(SshEffectorTasks.ssh(ImmutableList.of(String.format("mpirun -np %s --hostfile ~/mpi_hosts ~/tachyon/compile/linux-mpi/tachyon ~/tachyon/scenes/teapot.dat -format BMP -o teapot.%s.bmp > " +
 //                "~/raytraceout.%s",numOfNodes,numOfNodes,numOfNodes)))
 //                .machine(masterLocation)
 //                .summary("Running the teapot ray tracing benchmark."))
 //        .orSubmitAndBlock(masterNode);
-
-        log.info("copying results to local machine: {}","raytraceout."+numOfNodes+"."+masterLocation.getId());
-        masterLocation.copyFrom("raytraceout."+numOfNodes,"raytraceout."+numOfNodes+"."+masterLocation.getId());
+        // FIXME display results on console instead of copying a file across.
+        log.info("copying results to local machine: {}", "raytraceout." + numOfNodes + "." + masterLocation.getId());
+        masterLocation.copyFrom("raytraceout." + numOfNodes, "raytraceout." + numOfNodes + "." + masterLocation.getId());
         log.info("fetching the teapot");
-        masterLocation.copyFrom("teapot."+numOfNodes+".bmp","teapot."+numOfNodes+".bmp");
+        masterLocation.copyFrom(String.format("teapot.%s.bmp", numOfNodes), "teapot." + numOfNodes + ".bmp");
 
     }
 
