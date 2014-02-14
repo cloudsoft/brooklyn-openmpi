@@ -23,7 +23,6 @@ public interface MPINode extends SoftwareProcess {
     AttributeSensor<String> MASTER_PUBLIC_SSH_KEY = Sensors.newStringSensor("mpi.master.publicSshKey");
     AttributeSensor<List<String>> MPI_HOSTS = Sensors.newSensor(new TypeToken<List<String>>() {}, "mpinode.mpihosts", "A list of all mpi hosts in the cluster");
     MethodEffector<Void> UPDATE_HOSTS_FILE = new MethodEffector<Void>(MPINode.class, "updateHostsFile");
-    MethodEffector<Void> SIMPLE_COMPILE = new MethodEffector<Void>(MPINode.class, "simpleCompile");
 
 
 
