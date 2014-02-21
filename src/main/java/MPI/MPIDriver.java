@@ -10,4 +10,5 @@ import java.lang.String;import java.util.List;
 public interface MPIDriver extends SoftwareProcessDriver {
 
     public void updateHostsFile(List<String> mpiHosts);
+    public Integer getNumOfProcessors();
 }

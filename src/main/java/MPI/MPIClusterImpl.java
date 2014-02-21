@@ -12,6 +12,7 @@ import brooklyn.location.Location;
 import brooklyn.location.basic.SshMachineLocation;
 import brooklyn.util.collections.MutableMap;
 import brooklyn.util.ssh.BashCommands;
+import brooklyn.util.text.Strings;
 import com.google.common.base.Function;
 import com.google.common.base.Optional;
 import com.google.common.base.Predicates;
@@ -31,6 +32,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
 
     private static final Logger log = LoggerFactory.getLogger(MPIClusterImpl.class);
     private AtomicBoolean masterSshgenerated = new AtomicBoolean();
+    private AtomicBoolean setHosts = new AtomicBoolean();
 
     public void init() {
         log.info("Initializing the Open-MPI Cluster.");
@@ -82,7 +84,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
                 log.info("Updating mpi_hosts to master");
 
                 MPINode masterNode = getAttribute(MPICluster.MASTER_NODE);
-                Entities.invokeEffectorWithArgs(this, masterNode, MPINode.UPDATE_HOSTS_FILE, Optional.of(Lists.newArrayList(nodes.values())).get());
+                //Entities.invokeEffectorWithArgs(this, masterNode, MPINode.UPDATE_HOSTS_FILE, Optional.of(Lists.newArrayList(nodes.values())).get());
 
 
             }
@@ -159,6 +161,28 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
 
             }
         });
+
+
+        //if cluster is up then set all MPIHOSTS senso in MPINodes
+
+        subscribe(this, MPICluster.MPI_CLUSTER_NODES, new SensorEventListener<Map<Entity,String>>() {
+
+
+            @Override
+            public void onEvent(SensorEvent<Map<Entity,String>> event) {
+
+                //check if all hostnames are availble
+                if (event.getValue().size() == getConfig(INITIAL_SIZE) &&  !setHosts.getAndSet(true))
+                {
+                    //set MPI_HOSTS in children
+                    for (Entity e: getChildren())
+                    {
+                        ((EntityInternal) e).setAttribute(MPINode.MPI_HOSTS, Strings.join(event.getValue().values(),","));
+                    }
+                }
+            }
+
+        });
     }
 
     public void start(Collection<? extends Location> locations) {
@@ -226,6 +250,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
         masterLocation.copyFrom("raytraceout." + numOfNodes, "raytraceout." + numOfNodes + "." + masterLocation.getId());
         log.info("fetching the teapot");
         masterLocation.copyFrom(String.format("teapot.%s.bmp", numOfNodes), "teapot." + numOfNodes + ".bmp");
+
 
     }
 

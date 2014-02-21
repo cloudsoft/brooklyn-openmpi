@@ -7,12 +7,12 @@ import brooklyn.entity.basic.AbstractApplication;
 import brooklyn.entity.basic.ConfigKeys;
 import brooklyn.entity.proxying.EntitySpec;
 
-@Catalog(name="Open-MPI Cluster Demo", description="Deploy an Open-MPI cluster.")
+//@Catalog(name="Open-MPI Cluster Demo", description="Deploy an Open-MPI cluster.")
 
 public class MPIExample extends AbstractApplication {
 
 
-    @CatalogConfig(label="Initial Cluster Size (per location)", priority=1)
+    //@CatalogConfig(label="Initial Cluster Size (per location)")
     public static final ConfigKey<Integer> MPI_CLUSTER_SIZE = ConfigKeys.newConfigKey(
             "cassandra.cluster.initialSize", "Initial size of the Cassandra clusterss", 2);
 

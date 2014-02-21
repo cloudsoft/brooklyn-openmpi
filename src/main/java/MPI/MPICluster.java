@@ -1,13 +1,16 @@
 package MPI;
 
+import brooklyn.config.ConfigKey;
 import brooklyn.entity.Entity;
 import brooklyn.entity.annotation.Effector;
 import brooklyn.entity.annotation.EffectorParam;
+import brooklyn.entity.basic.ConfigKeys;
 import brooklyn.entity.basic.MethodEffector;
 import brooklyn.entity.group.DynamicCluster;
 import brooklyn.entity.proxying.ImplementedBy;
 import brooklyn.event.AttributeSensor;
 import brooklyn.event.basic.Sensors;
+import brooklyn.util.flags.SetFromFlag;
 import com.google.common.reflect.TypeToken;
 
 import java.util.Map;
@@ -34,4 +37,5 @@ public interface MPICluster extends DynamicCluster {
     AttributeSensor<Boolean> RAY_TRACING_DEMO_INSTALLED = Sensors.newBooleanSensor("mpiccluster.raytracing.demo.installed","flag to indicate if the ray tracing demo has been installed");
     @Effector(description = "Installs and runs a ray tracing app on my Open-MPI cluster")
     void runRayTracingDemo(@EffectorParam(name="numOfNodes", description="the number of nodes I want to run the demo.") Integer numOfNodes);
+
 }
