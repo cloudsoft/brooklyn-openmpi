@@ -1,7 +1,7 @@
 package MPI;
 
 import brooklyn.entity.basic.SoftwareProcessDriver;
-
+import brooklyn.entity.java.JavaSoftwareProcessDriver;
 import java.lang.String;import java.util.List;
 
 /**
@@ -9,6 +9,9 @@ import java.lang.String;import java.util.List;
  */
 public interface MPIDriver extends SoftwareProcessDriver {
 
-    public void updateHostsFile(List<String> mpiHosts);
+    public void updateHosts(List<String> mpiHosts);
     public Integer getNumOfProcessors();
+    public String getAdminHost();
+    public String getExecHosts();
+    public String getSubmissionHost();
 }

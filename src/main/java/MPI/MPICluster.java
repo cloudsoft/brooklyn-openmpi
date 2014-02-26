@@ -31,7 +31,7 @@ public interface MPICluster extends DynamicCluster {
     AttributeSensor<Map<Entity,String>> MPI_CLUSTER_NODES = Sensors.newSensor(new TypeToken<Map<Entity,String>>(){},"mpicluster.nodes", "Hostnames of all active Open MPI nodes in the cluster (public hostname/IP)");
     public static final AttributeSensor<Boolean> MASTER_SSH_KEY_GENERATED = Sensors.newBooleanSensor("mpicluster.master_ssh_key_generated","senses if the master node SSH key has been configured");
     public static final AttributeSensor<MPINode> MASTER_NODE = Sensors.newSensor(MPINode.class,"mpicluster.masternode","the master node for the cluster");
-
+    AttributeSensor<Boolean> ALL_HOSTS_READY = Sensors.newBooleanSensor("mpicluster.allhostsready","flag is set if all the hostnames are available and dispatched to the nodes");
     MethodEffector<Void> RUN_RAY_TRACING = new MethodEffector<Void>(MPICluster.class,"runRayTracingDemo");
 
     AttributeSensor<Boolean> RAY_TRACING_DEMO_INSTALLED = Sensors.newBooleanSensor("mpiccluster.raytracing.demo.installed","flag to indicate if the ray tracing demo has been installed");

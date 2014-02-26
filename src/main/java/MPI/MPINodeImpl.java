@@ -1,23 +1,18 @@
 package MPI;
 
-import brooklyn.entity.basic.Attributes;
 import brooklyn.entity.basic.SoftwareProcessImpl;
-import brooklyn.event.SensorEvent;
-import brooklyn.event.SensorEventListener;
-import com.google.common.base.Predicates;
+import brooklyn.entity.basic.VanillaSoftwareProcessImpl;
+import brooklyn.entity.java.VanillaJavaAppImpl;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class MPINodeImpl extends SoftwareProcessImpl implements MPINode {
+public class MPINodeImpl extends VanillaSoftwareProcessImpl implements MPINode {
 
-    private AtomicBoolean setNoOfProcessors;
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(MPINodeImpl.class);
-    @Override
-    public Class getDriverInterface() {
-        return MPIDriver.class;
-    }
+    private AtomicBoolean setNoOfProcessors;
+
 
     @Override
     public void init() {
@@ -27,21 +22,23 @@ public class MPINodeImpl extends SoftwareProcessImpl implements MPINode {
 
 
     @Override
-    protected void connectSensors() {
+    public void connectSensors() {
         super.connectSensors();
         connectServiceUpIsRunning();
 
     }
 
     @Override
-    protected void disconnectSensors() {
+    public void disconnectSensors() {
         super.disconnectSensors();
         disconnectServiceUpIsRunning();
     }
 
     @Override
-    public void updateHostsFile(List<String> mpiHosts) {
-        ((MPIDriver) getDriver()).updateHostsFile(mpiHosts);
+    public void updateHosts(List<String> mpiHosts) {
+
+        log.info("mpi hosts on MPINodeImpl are {}", mpiHosts.toString());
+        getDriver().updateHosts(mpiHosts);
     }
 
 
@@ -50,6 +47,13 @@ public class MPINodeImpl extends SoftwareProcessImpl implements MPINode {
         return (Boolean.TRUE.equals(getAttribute(MPINode.MASTER_FLAG)));
     }
 
+    @Override
+    public MPIDriver getDriver() {
+        return (MPIDriver) super.getDriver();
+    }
 
-
+    @Override
+    public Class<? extends MPIDriver> getDriverInterface() {
+        return MPIDriver.class;
+    }
 }

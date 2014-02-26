@@ -2,9 +2,11 @@ package MPI;
 
 import brooklyn.entity.Entity;
 import brooklyn.entity.basic.EntityInternal;
-import brooklyn.entity.basic.EntityLocal;
 import brooklyn.entity.basic.VanillaSoftwareProcessSshDriver;
 import brooklyn.entity.basic.lifecycle.ScriptHelper;
+import brooklyn.entity.java.JavaSoftwareProcessSshDriver;
+import brooklyn.entity.java.VanillaJavaAppImpl;
+import brooklyn.entity.java.VanillaJavaAppSshDriver;
 import brooklyn.event.AttributeSensor;
 import brooklyn.event.basic.DependentConfiguration;
 import brooklyn.location.basic.SshMachineLocation;
@@ -15,7 +17,6 @@ import brooklyn.util.stream.Streams;
 import brooklyn.util.task.Tasks;
 import brooklyn.util.text.Strings;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import com.google.common.io.Files;
 import org.apache.commons.io.Charsets;
 import org.slf4j.LoggerFactory;
@@ -34,14 +35,17 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
     // TODO Need to store as attribute, so persisted and restored on brooklyn-restart
     private String connectivityTesterPath;
 
-    public MPISshDriver(EntityLocal entity, SshMachineLocation machine) {
+
+    public MPISshDriver(VanillaJavaAppImpl entity, SshMachineLocation machine) {
         super(entity, machine);
     }
 
     @Override
     public void install() {
-        super.install();
 
+        attributeWhenReady(entity,MPINode.MPI_HOSTS);
+
+        log.info("MPI hosts ready");
         //set num of processors
         //log.info("setting the number of processors for {} ",entity.getId());
 
@@ -49,39 +53,41 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
 
         String debianFix = "export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
-        log.info("copying open-mpi and SGE binaries across to {}" , entity.getId());
+        log.info("copying open-mpi and SGE binaries across to {}", entity.getId());
 
-        getMachine().copyTo(new File(getClass().getClassLoader().getResource("ge2011.11p-linux64.tar.gz").getFile()),getInstallDir() + "/ge.tar.gz");
-        getMachine().copyTo(new File(getClass().getClassLoader().getResource("openmpi-1.6.5-withsge.tar.gz").getFile()), getInstallDir() + "/openmpi.tar.gz");
+        getMachine().execCommands("create install dir", ImmutableList.of(format("mkdir -p %s", getInstallDir())));
 
-        log.info("installing SGE on {}",entity.getId());
+        //TODO find a host for the pre-compiled binaries
+        getMachine().copyTo(new File(getClass().getClassLoader().getResource("ge2011.11p-linux64.tar.gz").getFile()), getInstallDir() + "/ge.tar.gz");
+        //getMachine().copyTo(new File(getClass().getClassLoader().getResource("openmpi-1.6.5-withsge.tar.gz").getFile()), getInstallDir() + "/openmpi.tar.gz");
+        log.info("installing SGE on {}", entity.getId());
         ScriptHelper installationScript = newScript(INSTALLING)
                 .body.append(BashCommands.installJava7OrFail())
                 .body.append(BashCommands.installPackage("build-essential"))
                 .body.append(BashCommands.installPackage("libpam0g-dev"))
                 .body.append(BashCommands.installPackage("libncurses5-dev"))
                 .body.append(BashCommands.installPackage("csh"))
-                //.body.append(BashCommands.commandToDownloadUrlAs("http://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.5.tar.gz","openmpi.tar.gz"))
-                //.body.append(BashCommands.commandToDownloadUrlAs("http://sourceforge.net/projects/gridscheduler/files/GE2011.11p1/GE2011.11p1.tar.gz/download?use_mirror=autoselect","ge.tar.gz"))
-                //.body.append(BashCommands.commandToDownloadUrlAs("http://svn.open-mpi.org/svn/ompi/tags/v1.6-series/v1.6.4/examples/connectivity_c.c", connectivityTesterPath))
-                //.body.append(format("cd %s", getInstallDir()))
-                //.body.append(format("tar xvfz ge.tar.gz"))
-                .body.append(format("mkdir -p %s/GEBinaries"),getInstallDir())
+                        //.body.append(BashCommands.commandToDownloadUrlAs("http://www.open-mpi.org/software/ompi/v1.6/downloads/openmpi-1.6.5.tar.gz","openmpi.tar.gz"))
+                        //.body.append(BashCommands.commandToDownloadUrlAs("http://sourceforge.net/projects/gridscheduler/files/GE2011.11p1/GE2011.11p1.tar.gz/download?use_mirror=autoselect","ge.tar.gz"))
+                        //.body.append(BashCommands.commandToDownloadUrlAs("http://svn.open-mpi.org/svn/ompi/tags/v1.6-series/v1.6.4/examples/connectivity_c.c", connectivityTesterPath))
+                        //.body.append(format("cd %s", getInstallDir()))
+                        //.body.append(format("tar xvfz ge.tar.gz"))
+                .body.append(format("mkdir -p %s/GEBinaries", getInstallDir()))
+                        // TODO fix SGE functionality first then move on to MPI
+                .body.append(format("mkdir -p %s", getGERunDir()))
+                        //.body.append(format("mkdir -p %s"), getMPIRunDir())
 
-                .body.append(format("mkdir -p %s"), getGERunDir())
-                .body.append(format("mkdir -p %s"), getMPIRunDir())
+                .body.append(format("tar xvfz %s/ge.tar.gz -C %s/GEBinaries", getInstallDir(), getInstallDir()))
+                        //.body.append(format("tar xvfz %s/openmpi.ta.gz -C %s",getInstallDir(),getMPIRunDir()))
 
-                .body.append(format("tar xvfz %s/ge.tar.gz -C %s/GEBinaries",getInstallDir(),getInstallDir()))
-                .body.append(format("tar xvfz %s/openmpi.ta.gz -C %s",getInstallDir(),getMPIRunDir()))
+                .body.append(format("export SGE_ROOT=%s", getGERunDir()))
+                .body.append(format("%s/GEBinaries/scripts/distinst -all -local -noexit -y", getInstallDir()))
 
-                .body.append(format("export SGE_ROOT=%s"),getGERunDir())
-                .body.append(format("%s/GEBinaries/scripts/distinst -all -local -noexit -y",getInstallDir()))
-
-                //.body.append(format("cd GE*/source"))
-                //.body.append(format("./aimk -no-java -no-jni -no-secure -spool-classic -no-dump -only-depend"))
-                //.body.append(format("./scripts/zerodepend"))
-                //.body.append(format("./aimk -no-java -no-jni -no-secure -spool-classic -no-dump depend"))
-                //.body.append(format("./aimk -no-java -no-jni -no-secure -spool-classic -no-dump -no-qmon"))
+                        //.body.append(format("cd GE*/source"))
+                        //.body.append(format("./aimk -no-java -no-jni -no-secure -spool-classic -no-dump -only-depend"))
+                        //.body.append(format("./scripts/zerodepend"))
+                        //.body.append(format("./aimk -no-java -no-jni -no-secure -spool-classic -no-dump depend"))
+                        //.body.append(format("./aimk -no-java -no-jni -no-secure -spool-classic -no-dump -no-qmon"))
                 .failOnNonZeroResultCode();
         //wait for MPI_HOSTS to be available
         //attributeWhenReady(entity,MPINode.MPI_HOSTS);
@@ -89,11 +95,12 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
         installationScript.execute();
 
 
-        log.info("MPI hosts are: {}" , entity.getAttribute(MPINode.MPI_HOSTS));
+        log.info("MPI hosts are: {}", entity.getAttribute(MPINode.MPI_HOSTS));
+        String sgeConfigTemplate = processTemplate(entity.getConfig(MPINode.SGE_CONFIG_TEMPLATE_URL));
 
-//        String sgeConfigTemplate = processTemplate(entity.getConfig(MPINode.SGE_CONFIG_TEMPLATE_URL));
+        log.info("Done processing the template!");
 //
-//        getMachine().copyTo(Streams.newInputStreamWithContents(sgeConfigTemplate), format("%s/brooklynsgeconfig", getRunDir()));
+        getMachine().copyTo(Streams.newInputStreamWithContents(sgeConfigTemplate), format("%s/brooklynsgeconfig", getGERunDir()));
 //
 //        String SGEinstallationCmd = "";
 //        if(((MPINode) entity).isMaster())
@@ -107,8 +114,7 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
 //                    .execute();
 
 
-
-                //automatically accept the liscence agreement
+        //automatically accept the liscence agreement
 //                "sudo echo oracle-java6-installer shared/accepted-oracle-license-v1-1 select true | sudo /usr/bin/debconf-set-selections",
 
 //                BashCommands.sudo("add-apt-repository ppa:webupd8team/java -y"),
@@ -116,25 +122,22 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
 //                BashCommands.installPackage("oracle-java6-installer"),
 //                BashCommands.installPackage("oracle-java6-set-default"),
 
-                //install open-mpi
+        //install open-mpi
 //                BashCommands.installPackage("openmpi-bin"),
 //                BashCommands.installPackage("openmpi-checkpoint"),
 //                BashCommands.installPackage("openmpi-common"),
 //                BashCommands.installPackage("openmpi-doc"),
 //                BashCommands.installPackage("libopenmpi-dev"),
 
-                //install pam dev package
+        //install pam dev package
 
-                //install curses package for qtcsh
-                //install csh
-                //get the files
-
-
-
-                //"tar xvfz openmpi.tar.gz -C ~/openmpi",
-                //"tar xvfz ge.tar.gz -C ~/ge");
+        //install curses package for qtcsh
+        //install csh
+        //get the files
 
 
+        //"tar xvfz openmpi.tar.gz -C ~/openmpi",
+        //"tar xvfz ge.tar.gz -C ~/ge");
 
         connectivityTesterPath = Os.mergePathsUnix(getInstallDir(), "connectivity_c.c");
 
@@ -154,19 +157,15 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
         //        .execute();
     }
 
+
     @Override
     public Map<String, String> getShellEnvironment() {
         return super.getShellEnvironment();
     }
 
-    @Override
-    public String getPidFile() {
-        return super.getPidFile();
-    }
 
     @Override
     public void launch() {
-
 
 
         //if entity is master generates the master ssh key and sets the master flag to be set.
@@ -201,10 +200,14 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
     }
 
     @Override
-    public void updateHostsFile(List<String> mpiHosts) {
+    public void updateHosts(List<String> mpiHosts) {
 
-            log.info("copying hosts inside ssh driver");
-            getMachine().copyTo(Streams.newInputStreamWithContents(Strings.join(mpiHosts, "\n")), "mpi_hosts");
+//        log.info("copying hosts inside ssh driver");
+//        getMachine().copyTo(Streams.newInputStreamWithContents(Strings.join(mpiHosts, "\n")), "mpi_hosts");
+
+        log.info("mpi hosts are : {}", entity.getAttribute(MPINode.MPI_HOSTS).get(0));
+        //entity.setAttribute(MPINode.MPI_HOSTS,mpiHosts);
+        log.info("mpi hosts are : {}", entity.getAttribute(MPINode.MPI_HOSTS));
 
     }
 
@@ -224,12 +227,12 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
                     .body.append("mkdir -p ~/.ssh/")
                     .body.append("chmod 700 ~/.ssh/")
                     .body.append(BashCommands.executeCommandThenAsUserTeeOutputToFile("echo \"StrictHostKeyChecking no\"", "root", "/etc/ssh/ssh_config"))
-            // commented because we do not need slave ssh keys to be copied to master
-            //       .body.append("ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -C \"Open MPI\" -P \"\"")
-            //       .body.append("cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys")
+                    // commented because we do not need slave ssh keys to be copied to master
+                    //       .body.append("ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -C \"Open MPI\" -P \"\"")
+                    //       .body.append("cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys")
                     .body.append("cat id_rsa.pub.txt >> ~/.ssh/authorized_keys")
                     .body.append("chmod 600 ~/.ssh/authorized_keys")
-            //       .body.append("cp ~/.ssh/id_rsa.pub id_rsa.pub." + entity.getId())
+                    //       .body.append("cp ~/.ssh/id_rsa.pub id_rsa.pub." + entity.getId())
                     .failOnNonZeroResultCode()
                     .execute();
 
@@ -253,7 +256,7 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
 
     private String generateSshKey() {
 
-        log.info("generating the master node ssh key on node: {}",entity.getId());
+        log.info("generating the master node ssh key on node: {}", entity.getId());
 
 
         //disables StrictHostKeyCheck and generates the master node key to allow communication between the nodes
@@ -288,8 +291,7 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
         }
     }
 
-    public Integer getNumOfProcessors()
-    {
+    public Integer getNumOfProcessors() {
         ScriptHelper fetchingProcessorsScript = newScript("gettingTheNoOfProcessors")
                 .body.append("cat /proc/cpuinfo | grep processor | wc -l")
                 .failOnNonZeroResultCode();
@@ -299,35 +301,31 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
         return Integer.parseInt(fetchingProcessorsScript.getResultStdout().split("\\n")[0].trim());
     }
 
-    public String getMPIHosts()
-    {
-        return entity.getAttribute(MPINode.MPI_HOSTS);
+    public String getMPIHosts() {
+        return Strings.join(entity.getAttribute(MPINode.MPI_HOSTS), " ");
     }
 
-    public String getAdminHost()
-    {
-        return ((EntityInternal) entity.getConfig(MPINode.MPI_MASTER)).getAttribute(MPINode.HOSTNAME);
+    public String getAdminHost() {
+        return "localhost";
+        //return ((EntityInternal) entity.getConfig(MPINode.MPI_MASTER)).getAttribute(MPINode.HOSTNAME);
     }
 
-    public String getExecHosts()
-    {
-        return "\"" + ((EntityInternal) entity.getConfig(MPINode.MPI_MASTER)).getAttribute(MPINode.HOSTNAME) + "\"" ;
+    public String getExecHosts() {
+        return "localhost";
+        //return "\"" + ((EntityInternal) entity.getConfig(MPINode.MPI_MASTER)).getAttribute(MPINode.HOSTNAME) + "\"";
     }
 
-    public String getSubmissionHost()
-    {
-        return entity.getAttribute(MPINode.MPI_HOSTS);
+    public String getSubmissionHost() {
+        return "localhost";
+        //return entity.getAttribute(MPINode.MPI_HOSTS);
     }
 
 
-    private String getGERunDir()
-    {
+    private String getGERunDir() {
         return getRunDir() + "/GE";
     }
 
-    private String getMPIRunDir()
-    {
+    private String getMPIRunDir() {
         return getRunDir() + "/open-mpi";
     }
-
 }
