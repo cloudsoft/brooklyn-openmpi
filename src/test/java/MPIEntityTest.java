@@ -6,10 +6,14 @@ import brooklyn.entity.basic.Entities;
 import brooklyn.entity.proxying.EntitySpec;
 import brooklyn.location.Location;
 import brooklyn.location.LocationSpec;
+import brooklyn.location.MachineProvisioningLocation;
+import brooklyn.location.NoMachinesAvailableException;
 import brooklyn.location.basic.LocalhostMachineProvisioningLocation;
+import brooklyn.location.basic.SshMachineLocation;
 import brooklyn.management.ManagementContext;
 import brooklyn.test.entity.TestApplication;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testng.annotations.AfterMethod;
@@ -21,7 +25,7 @@ public class MPIEntityTest extends BrooklynMgmtContextTestSupport {
     private static final Logger log = LoggerFactory.getLogger(MPIEntityTest.class);
 
     private TestApplication app;
-    private Location testLocation;
+    private MachineProvisioningLocation testLocation;
     private MPICluster cluster;
     private ManagementContext managementContext;
 
@@ -29,8 +33,10 @@ public class MPIEntityTest extends BrooklynMgmtContextTestSupport {
     public void setup() {
         app = ApplicationBuilder.newManagedApp(TestApplication.class);
         managementContext = app.getManagementContext();
-        testLocation = managementContext.getLocationManager().createLocation(LocationSpec.create(LocalhostMachineProvisioningLocation.class));
+       testLocation = managementContext.getLocationManager().createLocation(LocationSpec.create(LocalhostMachineProvisioningLocation.class));
+
     }
+
 
     @AfterMethod(alwaysRun = true)
     public void shutdown() {
@@ -38,14 +44,13 @@ public class MPIEntityTest extends BrooklynMgmtContextTestSupport {
     }
 
     @Test(groups = "installation")
-    public void testInstallation()
-    {
+    public void testInstallation() throws NoMachinesAvailableException {
         cluster = app.createAndManageChild(EntitySpec.create(MPICluster.class)
                 .configure(MPICluster.INITIAL_SIZE, 1)
                 .configure(MPICluster.MEMBER_SPEC, EntitySpec.create(MPINode.class)));
 
 
-        app.start(ImmutableList.of(testLocation));
+        app.start(ImmutableList.of(testLocation.obtain(ImmutableMap.of())));
 
 
         Entities.dumpInfo(app);
