@@ -8,6 +8,7 @@ import brooklyn.entity.group.DynamicClusterImpl;
 import brooklyn.entity.trait.Startable;
 import brooklyn.event.SensorEvent;
 import brooklyn.event.SensorEventListener;
+import brooklyn.event.basic.DependentConfiguration;
 import brooklyn.location.Location;
 import brooklyn.location.basic.SshMachineLocation;
 import brooklyn.util.collections.MutableMap;
@@ -23,7 +24,9 @@ import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static brooklyn.util.JavaGroovyEquivalents.groovyTruth;
 
@@ -31,27 +34,14 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
 
     private static final Logger log = LoggerFactory.getLogger(MPIClusterImpl.class);
     private AtomicBoolean masterSshgenerated = new AtomicBoolean();
-    private AtomicBoolean setHosts = new AtomicBoolean();
-    private final List<String> hostsList = Lists.newArrayList();
+    private AtomicInteger memberTrackerCount = new AtomicInteger(0);
+
     public void init() {
         log.info("Initializing the Open-MPI Cluster.");
         super.init();
 
-        subscribeToMembers(this,MPINode.HOSTNAME,new SensorEventListener<String>() {
-            @Override
-            public void onEvent(SensorEvent<String> event) {
+        memberTrackerCount.set(getConfig(INITIAL_SIZE));
 
-
-                hostsList.add(event.getValue());
-
-//                if (Predicates.notNull().apply(getConfig(MPICluster.INITIAL_SIZE)) && hostsList.size() == getConfig(MPICluster.INITIAL_SIZE) && getConfig(MPICluster.INITIAL_SIZE) > 0)
-//                {
-//                    log.info("all hosts are ready");
-//                    //Entities.invokeEffectorWithArgs(MPIClusterImpl.this, getAttribute(MPICluster.MASTER_NODE), MPINode.UPDATE_HOSTS, hostsList);
-//                }
-
-            }
-        });
 
     }
 
@@ -66,7 +56,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
                 ((EntityInternal) member).setConfig(MPINode.MASTER_FLAG, true);
                 master = member;
 
-                log.info("Setting master node to be {}",member.getId());
+                log.info("Setting master node to be {}", member.getId());
 
                 setAttribute(MPICluster.MASTER_NODE, (MPINode) master);
             } else {
@@ -75,6 +65,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
 
             // set the master node for each new entity.
             ((EntityInternal) member).setConfig(MPINode.MPI_MASTER, (MPINode) master);
+
         }
 
         return member;
@@ -90,24 +81,11 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
             if (address == null) {
                 log.error("Unable to construct hostname:port representation for {} ({}:{}); skipping in {}");
             } else {
+
+                log.info("Added new MPI member to {}: {}; {}", new Object[]{this, member, address});
+
                 nodes.put(member, address);
                 setAttribute(MPI_CLUSTER_NODES, nodes);
-
-                MPINode masterNode = getAttribute(MPICluster.MASTER_NODE);
-                //if all hosts are ready then set mpi hosts in children..
-                if (nodes.size() == getConfig(INITIAL_SIZE))
-                {
-                    log.info("Added new MPI member to {}: {}; {}", new Object[]{this, member, address});
-
-                    log.info("Updating mpi_hosts to master");
-
-                   // Entities.invokeEffectorWithArgs(this, masterNode,MPINode.UPDATE_HOSTS,nodes.values());
-
-                }
-
-
-
-
 
             }
         } else {
@@ -121,7 +99,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
 
                 MPINode masterNode = getAttribute(MPICluster.MASTER_NODE);
 
-           //     Entities.invokeEffectorWithArgs(this, masterNode, MPINode.UPDATE_HOSTS, Optional.of(Lists.newArrayList(nodes.values())).get(), getConfig(INITIAL_SIZE));
+                Entities.invokeEffectorWithArgs(this, masterNode, MPINode.UPDATE_HOSTS, Optional.of(Lists.newArrayList(nodes.values())).get());
             }
         }
         if (log.isTraceEnabled()) log.trace("Done {} checkEntity {}", this, member);
@@ -149,7 +127,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
 
         Map<String, Object> flags = MutableMap.<String, Object>builder()
                 .put("name", "Controller targets tracker")
-        //        .put("sensorsToTrack", ImmutableSet.of(MPINode.ADDRESS))
+                .put("sensorsToTrack", ImmutableSet.of(MPINode.ADDRESS))
                 .build();
 
         AbstractMembershipTrackingPolicy serverPoolMemberTrackerPolicy = new AbstractMembershipTrackingPolicy(flags) {
@@ -187,8 +165,10 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
 
 
 
+
     }
 
+    @Override
     public void start(Collection<? extends Location> locations) {
 
         super.start(locations);

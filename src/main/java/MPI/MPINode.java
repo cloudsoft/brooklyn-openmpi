@@ -21,7 +21,7 @@ import com.google.common.reflect.TypeToken;
 import java.util.List;
 
 @ImplementedBy(MPINodeImpl.class)
-public interface MPINode extends VanillaSoftwareProcess {
+public interface MPINode extends SoftwareProcess {
 
     BasicAttributeSensorAndConfigKey<Boolean> MASTER_FLAG = new BasicAttributeSensorAndConfigKey<Boolean>(Boolean.class, "mpinode.masterFlag", "indicates whether this node is master", Boolean.FALSE);
     ConfigKey<MPINode> MPI_MASTER = ConfigKeys.newConfigKey(MPINode.class, "mpi.master.node");
@@ -32,7 +32,7 @@ public interface MPINode extends VanillaSoftwareProcess {
 
 
 
-    //public static final MethodEffector<Void> UPDATE_HOSTS = new MethodEffector<Void>(MPINode.class,"updateHosts");
+    public static final MethodEffector<Void> UPDATE_HOSTS = new MethodEffector<Void>(MPINode.class,"updateHosts");
 
 
     AttributeSensor<Boolean> GE_INSTALLED = Sensors.newBooleanSensor("mpinode.sgeInstalled", "flag to indicate if Grid Engine was installed");
@@ -41,7 +41,7 @@ public interface MPINode extends VanillaSoftwareProcess {
     @SetFromFlag("SGEConfigTemplate")
     ConfigKey<String> SGE_CONFIG_TEMPLATE_URL = ConfigKeys.newStringConfigKey(
             "mpicluster.sgeconfig.template", "Template file (in freemarker format) for configuring the SGE installation",
-            "classpath://gridengineinstalltemplate");
+            "classpath://sge_installation");
 
     @Effector(description = "updates the hosts list for the node")
     public void updateHosts(@EffectorParam(name = "mpiHosts", description = "list of all mpi hosts in the cluster") List<String> mpiHosts);
