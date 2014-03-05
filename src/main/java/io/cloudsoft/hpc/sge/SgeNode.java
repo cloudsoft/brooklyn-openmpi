@@ -21,12 +21,16 @@ import java.util.Map;
 @ImplementedBy(SgeNodeImpl.class)
 public interface SgeNode extends SoftwareProcess {
 
-    BasicAttributeSensorAndConfigKey<Boolean> MASTER_FLAG = new BasicAttributeSensorAndConfigKey<Boolean>(Boolean.class, "mpinode.masterFlag", "indicates whether this node is master", Boolean.FALSE);
-    ConfigKey<SgeNode> SGE_MASTER = ConfigKeys.newConfigKey(SgeNode.class, "mpi.master.node");
-    AttributeSensor<String> MASTER_PUBLIC_SSH_KEY = Sensors.newStringSensor("mpi.master.publicSshKey");
+
+    ConfigKey<String> CLUSTER_NAME = ConfigKeys.newStringConfigKey("sge.cluster.name","name of the sge cluster","brooklyn_sge_cluster");
+    BasicAttributeSensorAndConfigKey<Boolean> MASTER_FLAG = new BasicAttributeSensorAndConfigKey<Boolean>(Boolean.class, "sge.masterFlag", "indicates whether this node is the master", Boolean.FALSE);
+    ConfigKey<SgeNode> SGE_MASTER = ConfigKeys.newConfigKey(SgeNode.class, "sge.master.node");
+    ConfigKey<String> SGE_ROOT = ConfigKeys.newStringConfigKey("sge.root","name of the sge root folder","/opt/sge6/");
+    ConfigKey<String> SGE_ADMIN = ConfigKeys.newStringConfigKey("sge.admin","name of the sge admin user","sgeadmin");
+    AttributeSensor<String> MASTER_PUBLIC_SSH_KEY = Sensors.newStringSensor("sge.master.publicSshKey");
     AttributeSensor<List<String>> SGE_HOSTS = Sensors.newSensor(new TypeToken<List<String>>() {
-    }, "mpinode.hosts", "Hostnames of all active Open MPI nodes in the cluster (public hostname/IP)");
-    AttributeSensor<Boolean> ALL_HOSTS_UP = Sensors.newBooleanSensor("mpinode.all.hosts.up");
+    }, "sge.hosts", "Hostnames of all active sge nodes in the cluster (public hostname/IP)");
+
 
 
     ConfigKey<String> MPI_VERSION = ConfigKeys.newStringConfigKey("mpi.version", "version of MPI", "1.6.5");
@@ -46,13 +50,18 @@ public interface SgeNode extends SoftwareProcess {
     public static final MethodEffector<Void> UPDATE_HOSTS = new MethodEffector<Void>(SgeNode.class,"updateHosts");
 
 
-    AttributeSensor<Boolean> GE_INSTALLED = Sensors.newBooleanSensor("mpinode.sgeInstalled", "flag to indicate if Grid Engine was installed");
     AttributeSensor<Integer> NUM_OF_PROCESSORS = Sensors.newIntegerSensor("mpinode.num_of_processors", "attribute that shows the number of proceesors");
 
     @SetFromFlag("SGEConfigTemplate")
     ConfigKey<String> SGE_CONFIG_TEMPLATE_URL = ConfigKeys.newStringConfigKey(
-            "mpicluster.sgeconfig.template", "Template file (in freemarker format) for configuring the io installation",
+            "sge.config.template", "Template file (in freemarker format) for configuring the io installation",
             "classpath://sge_installation");
+
+    @SetFromFlag("SGEProfileTemplate")
+    ConfigKey<String> SGE_PROFILE_TEMPLATE_URL = ConfigKeys.newStringConfigKey(
+            "sge.config.profile", "Template file (in freemarker format) for setting the environment variables for sge",
+            "classpath://sge_profile");
+
 
     @Effector(description = "updates the hosts list for the node")
     public void updateHosts(@EffectorParam(name = "mpiHosts", description = "list of all mpi hosts in the cluster") List<String> mpiHosts);
@@ -64,4 +73,6 @@ public interface SgeNode extends SoftwareProcess {
 
     @Effector(description="Run on the master, will add the slave-node so jobs can be executed on it")
     public void addSlave(SgeNode slave);
+
+    public String getClusterName();
 }

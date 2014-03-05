@@ -10,7 +10,7 @@ public interface SgeDriver extends JavaSoftwareProcessDriver {
 
     public void updateHosts(List<String> mpiHosts);
     public Integer getNumOfProcessors();
-    public String getAdminHost();
+    public String getAdminHosts();
     public String getExecHosts();
     public String getSubmissionHosts();
     public String getSgeRoot();

@@ -29,31 +29,27 @@ import static java.lang.String.format;
 public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDriver {
 
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(SgeSshDriver.class);
-    // TODO Need to store as attribute, so persisted and restored on brooklyn-restart
-    private String connectivityTesterPath;
-
-    protected final MpiSshMixin mpiMixin;
+    //protected final MpiSshMixin mpiMixin;
 
     public SgeSshDriver(SgeNodeImpl entity, SshMachineLocation machine) {
         super(entity, machine);
-        mpiMixin = new MpiSshMixin(this, machine);
+        //mpiMixin = new MpiSshMixin(this, machine);
+    }
+
+    public static List<String> startNfsServer(String exportDir) {
+        return ImmutableList.of(
+                format("echo \"%s *(rw,sync,no_subtree_check,no_root_squash)\" >> /etc/exports", exportDir)
+                , "/etc/init.d/portmap start"
+                , "/etc/init.d/nfs-kernel-server start");
     }
 
     @Override
     protected String getLogFileLocation() {
-        return String.format("%s/mpinode.log", getRunDir());
+        return String.format("%s/sgenode.log", getRunDir());
     }
 
     @Override
     public void install() {
-        log.info("waiting for hosts to be ready");
-
-        String sgeConfigTemplate = processTemplate(entity.getConfig(SgeNode.SGE_CONFIG_TEMPLATE_URL));
-
-
-        getMachine().execCommands("create install dir", ImmutableList.of(format("mkdir -p %s", getInstallDir())));
-        getMachine().copyTo(Streams.newInputStreamWithContents(sgeConfigTemplate), format("%s/io.conf", getInstallDir()));
-
 
         log.info("installing io on {}", entity.getId());
 
@@ -62,7 +58,10 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
                 BashCommands.installPackage("build-essential"),
                 BashCommands.installPackage("libpam0g-dev"),
                 BashCommands.installPackage("libncurses5-dev"),
-                BashCommands.installPackage("csh"));
+                BashCommands.installPackage("csh"),
+                format("export SGE_ROOT=%s", getSgeRoot()),
+                format("useradd %s", getSgeAdmin())
+                );
 
         if (isMaster()) {
             log.info("MPI hosts are: {}", entity.getAttribute(SgeNode.SGE_HOSTS));
@@ -77,18 +76,15 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
                     // FIXME use same pattern as in Jboss7SshDriver.install, and Jboss7Serer.DOWNLOAD_URL
                     .body.append(BashCommands.commandsToDownloadUrlsAs(ImmutableList.of("http://dl.dropbox.com/u/47200624/respin/ge2011.11.tar.gz"), format("%s/ge.tar.gz", getInstallDir())))
 
-                            // TODO fix io functionality first then move on to MPI
+                    // TODO fix io functionality first then move on to MPI
                     .body.append(format("tar xvfz %s/ge.tar.gz", getInstallDir()))
                     .body.append(format("mv %s/ge2011.11/ %s", getInstallDir(), getSgeRoot()))
 
-                    .body.append(format("export SGE_ROOT=%s", getSgeRoot()))
-                    .body.append(format("useradd %s", getSgeAdmin()))
-
                     //set the io admin to be the owner of the io root folder
-                    .body.append(format("chown %s %s",getSgeAdmin(),getSgeRoot()))
+                    .body.append(format("chown %s %s", getSgeAdmin(), getSgeRoot()))
 
 
-                    .body.append(mpiMixin.installCommands())
+                    //              .body.append(mpiMixin.installCommands())
 
                     .execute();
 
@@ -98,17 +94,17 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
                     .body.append(genericInstallCommands)
                     //install nfs common on slave
                     .body.append(BashCommands.installPackage("nfs-common"))
-                    .body.append(mpiMixin.installCommands())
+                    //            .body.append(mpiMixin.installCommands())
                     .execute();
         }
     }
 
-    public static List<String> startNfsServer(String exportDir) {
-        throw new UnsupportedOperationException();
-    }
-
-    public static List<String> mountNfsDir(String host, String remoteDir, String mountPoint) {
-        throw new UnsupportedOperationException();
+    public List<String> mountNfsDir(String host, String remoteDir, String mountPoint) {
+        return ImmutableList.of(
+                "/etc/init.d/portmap start",
+                format("mkdir -p %s",mountPoint),
+                format("mount %s:%s %s", host, remoteDir, mountPoint)
+        );
     }
 
     @Override
@@ -117,10 +113,19 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
         attributeWhenReady(entity, SgeNode.SGE_HOSTS);
         log.info("MPI hosts ready, in {}", this);
 
-        String sgeConfigTemplate = processTemplate(entity.getConfig(SgeNode.SGE_CONFIG_TEMPLATE_URL));
+
+
 
         getMachine().execCommands("create run dir", ImmutableList.of(format("mkdir -p %s", getRunDir())));
-        getMachine().copyTo(Streams.newInputStreamWithContents(sgeConfigTemplate), format("%s/io.conf", getRunDir()));
+
+        //process the installation template
+        String sgeConfigTemplate = processTemplate(entity.getConfig(SgeNode.SGE_CONFIG_TEMPLATE_URL));
+        getMachine().copyTo(Streams.newInputStreamWithContents(sgeConfigTemplate), format("%s/sge_setup.conf", getRunDir()));
+
+        //process the sge profile template and source it.
+        String sgeProfileTemplate = processTemplate(entity.getConfig(SgeNode.SGE_PROFILE_TEMPLATE_URL));
+        getMachine().copyTo(Streams.newInputStreamWithContents(sgeProfileTemplate), format("%s/sge_profile.conf", getRunDir()));
+
 
         // FIXME Remove duplication for master/slave paths?
         if (isMaster()) {
@@ -128,8 +133,8 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
                     .failOnNonZeroResultCode()
                     .body.append(startNfsServer(getSgeRoot()))
                     .body.append(format("export SGE_ROOT=%s", getSgeRoot()))
-                    .body.append(format("cd %s && TERM=rxvt ./inst_sge -m -x -noremote -auto %s/io.conf",getSgeRoot(), getRunDir()))
-                    .body.append(mpiMixin.customizeCommands())
+                    .body.append(format("cd %s && TERM=rxvt ./inst_sge -m -x -noremote -auto %s/sge_setup.conf", getSgeRoot(), getRunDir()))
+                    //          .body.append(mpiMixin.customizeCommands())
                     .execute();
         } else {
             // wait for the master, so our mount point and inst_sge etc are ready
@@ -144,8 +149,8 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
                     .failOnNonZeroResultCode()
                     .body.append(mountNfsDir(masterHostname, masterDir, getSgeRoot()))
                     .body.append(format("export SGE_ROOT=%s", getSgeRoot()))
-                    .body.append(format("cd %s && TERM=rxvt ./inst_sge -x -noremote -auto %s/io.conf", getSgeRoot(), getRunDir()))
-                    .body.append(mpiMixin.customizeCommands())
+                    .body.append(format("cd %s && TERM=rxvt ./inst_sge -x -noremote -auto %s/sge_setup.conf", getSgeRoot(), getRunDir()))
+                    //           .body.append(mpiMixin.customizeCommands())
                     .execute();
         }
 
@@ -333,13 +338,9 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
         return Integer.parseInt(fetchingProcessorsScript.getResultStdout().split("\\n")[0].trim());
     }
 
-    public String getMPIHosts() {
-        return Strings.join(entity.getAttribute(SgeNode.SGE_HOSTS), " ");
-    }
-
     @Override
-    public String getAdminHost() {
-        return getMaster().getAttribute(SgeNode.HOSTNAME);
+    public String getAdminHosts() {
+        return Strings.join(entity.getAttribute(SgeNode.SGE_HOSTS), " ");
     }
 
     @Override
@@ -353,24 +354,15 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
 
     }
 
-
-    private String getGERunDir() {
-        return getRunDir() + "/GE";
-    }
-
-    private String getMPIRunDir() {
-        return getRunDir() + "/open-mpi";
-    }
-
     // FIXME Use config key
     @Override
     public String getSgeRoot() {
-        return "/opt/sge6";
+        return entity.getConfig(SgeNode.SGE_ROOT);
     }
 
     @Override
     public String getSgeAdmin() {
-        return "sgeadmin";
+        return entity.getConfig(SgeNode.SGE_ADMIN);
     }
 
     @Override
@@ -383,8 +375,7 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
         return getArchScript.getResultStdout().split("\n")[0];
     }
 
-    public SgeNode getMaster()
-    {
+    public SgeNode getMaster() {
         if (Boolean.TRUE.equals(entity.getConfig(SgeNode.MASTER_FLAG)))
             return (SgeNode) entity;
         else

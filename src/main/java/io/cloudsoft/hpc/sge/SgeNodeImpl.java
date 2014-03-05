@@ -43,6 +43,11 @@ public class SgeNodeImpl extends SoftwareProcessImpl implements SgeNode {
     }
 
     @Override
+    public String getClusterName() {
+        return getConfig(SgeNode.CLUSTER_NAME);
+    }
+
+    @Override
     public void connectSensors() {
         super.connectSensors();
         connectServiceUpIsRunning();
