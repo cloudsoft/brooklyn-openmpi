@@ -25,7 +25,7 @@ public class MPIExample extends AbstractApplication {
     {
         addChild(EntitySpec.create(SgeCluster.class)
                 .configure(SgeCluster.INITIAL_SIZE, getConfig(MPI_CLUSTER_SIZE))
-                .configure(SgeCluster.MEMBER_SPEC, EntitySpec.create(SgeNode.class)));
+                .configure(SgeCluster.MEMBER_SPEC, EntitySpec.create(SgeNode.class).configure(SgeNode.SGE_PE_NAME,"mpi_pe")));
     }
 
     public static void main(String[] argv) {

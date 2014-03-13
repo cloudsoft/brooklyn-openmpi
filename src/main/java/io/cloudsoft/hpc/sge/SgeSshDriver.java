@@ -4,14 +4,17 @@ import brooklyn.entity.Entity;
 import brooklyn.entity.basic.EntityInternal;
 import brooklyn.entity.basic.lifecycle.ScriptHelper;
 import brooklyn.entity.java.JavaSoftwareProcessSshDriver;
+import brooklyn.entity.software.SshEffectorTasks;
 import brooklyn.event.AttributeSensor;
 import brooklyn.event.basic.DependentConfiguration;
 import brooklyn.location.basic.SshMachineLocation;
 import brooklyn.util.exceptions.Exceptions;
 import brooklyn.util.ssh.BashCommands;
 import brooklyn.util.stream.Streams;
+import brooklyn.util.task.DynamicTasks;
 import brooklyn.util.task.Tasks;
 import brooklyn.util.text.Strings;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.Files;
@@ -51,8 +54,7 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
     @Override
     public void install() {
 
-        log.info("installing io on {}", entity.getId());
-
+        log.info("installing SGE on {}", entity.getId());
 
         List<String> genericInstallCommands = ImmutableList.of(BashCommands.installJava7OrFail(),
                 BashCommands.installPackage("build-essential"),
@@ -61,10 +63,10 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
                 BashCommands.installPackage("csh"),
                 format("export SGE_ROOT=%s", getSgeRoot()),
                 format("useradd %s", getSgeAdmin())
-                );
+        );
 
         if (isMaster()) {
-            log.info("MPI hosts are: {}", entity.getAttribute(SgeNode.SGE_HOSTS));
+            log.info("SGE hosts are: {}", entity.getAttribute(SgeNode.SGE_HOSTS));
 
             newScript(INSTALLING)
                     .failOnNonZeroResultCode()
@@ -97,12 +99,15 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
                     //            .body.append(mpiMixin.installCommands())
                     .execute();
         }
+
+        //set the No of processors this machine has
+        entity.setAttribute(SgeNode.NUM_OF_PROCESSORS, getNumOfProcessors());
     }
 
     public List<String> mountNfsDir(String host, String remoteDir, String mountPoint) {
         return ImmutableList.of(
                 "/etc/init.d/portmap start",
-                format("mkdir -p %s",mountPoint),
+                format("mkdir -p %s", mountPoint),
                 format("mount %s:%s %s", host, remoteDir, mountPoint)
         );
     }
@@ -111,48 +116,74 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
     public void customize() {
         log.info("Waiting for any hosts to be ready, in {}", this);
         attributeWhenReady(entity, SgeNode.SGE_HOSTS);
-        log.info("MPI hosts ready, in {}", this);
-
-
+        log.info("SGE hosts ready, in {}", this);
 
 
         getMachine().execCommands("create run dir", ImmutableList.of(format("mkdir -p %s", getRunDir())));
-
         //process the installation template
         String sgeConfigTemplate = processTemplate(entity.getConfig(SgeNode.SGE_CONFIG_TEMPLATE_URL));
         getMachine().copyTo(Streams.newInputStreamWithContents(sgeConfigTemplate), format("%s/sge_setup.conf", getRunDir()));
 
-        //process the sge profile template and source it.
-        String sgeProfileTemplate = processTemplate(entity.getConfig(SgeNode.SGE_PROFILE_TEMPLATE_URL));
-        getMachine().copyTo(Streams.newInputStreamWithContents(sgeProfileTemplate), format("%s/sge_profile.conf", getRunDir()));
-
 
         // FIXME Remove duplication for master/slave paths?
         if (isMaster()) {
-            newScript(CUSTOMIZING)
+
+            //process the sge profile template and source it.
+            String sgeProfileTemplate = processTemplate(entity.getConfig(SgeNode.SGE_PROFILE_TEMPLATE_URL));
+
+            DynamicTasks.queueIfPossible(SshEffectorTasks.put(format("%s/sge_profile.conf", getRunDir()))
+                    .contents(Streams.newInputStreamWithContents(sgeProfileTemplate))
+                    .machine(getMachine())
+                    .summary("sending the processed profile template to the machine"));
+
+
+            DynamicTasks.queueIfPossible(newScript(CUSTOMIZING)
                     .failOnNonZeroResultCode()
                     .body.append(startNfsServer(getSgeRoot()))
                     .body.append(format("export SGE_ROOT=%s", getSgeRoot()))
-                    .body.append(format("cd %s && TERM=rxvt ./inst_sge -m -x -noremote -auto %s/sge_setup.conf", getSgeRoot(), getRunDir()))
-                    //          .body.append(mpiMixin.customizeCommands())
-                    .execute();
+                    .body.append(format("cd %s && TERM=rxvt ./inst_sge -m -x -noremote -jmx -auto %s/sge_setup.conf", getSgeRoot(), getRunDir()))
+                            //          .body.append(mpiMixin.customizeCommands())
+                    .body.append(format("cat %s/sge_profile.conf >> /etc/bash.bashrc", getRunDir()))
+                    .body.append(format("source /etc/bash.bashrc"))
+                    .newTask());
+
+
         } else {
             // wait for the master, so our mount point and inst_sge etc are ready
             // TODO assumes that SgeMaster is configured identically, to have the same dir exported as we want to mount
             SgeNode master = entity.getConfig(SgeNode.SGE_MASTER);
             attributeWhenReady(master, SgeNode.SERVICE_UP);
 
+            //mount master's sge root on NFS
             String masterHostname = master.getAttribute(SgeNode.HOSTNAME);
             String masterDir = getSgeRoot();
+            DynamicTasks.queueIfPossible(SshEffectorTasks
+                    .ssh(mountNfsDir(masterHostname, masterDir, getSgeRoot()))
+                    .machine(getMachine())
+                    .summary(format("mounting SGE_ROOT on slave: %s", entity.getId()))
+                    .newTask());
 
-            newScript(CUSTOMIZING)
+
+            //after waiting for Master to run and NFS linked
+            String sgeProfileTemplate = processTemplate(entity.getConfig(SgeNode.SGE_PROFILE_TEMPLATE_URL));
+            //getMachine().copyTo(Streams.newInputStreamWithContents(sgeProfileTemplate), format("%s/sge_profile.conf", getRunDir()));
+            DynamicTasks.queueIfPossible(SshEffectorTasks.put(format("%s/sge_profile.conf", getRunDir()))
+                    .contents(Streams.newInputStreamWithContents(sgeProfileTemplate))
+                    .machine(getMachine())
+                    .summary(format("sending the processed profile template to the slave machine %s", entity.getId())));
+
+
+            DynamicTasks.queueIfPossible(newScript(CUSTOMIZING)
                     .failOnNonZeroResultCode()
-                    .body.append(mountNfsDir(masterHostname, masterDir, getSgeRoot()))
                     .body.append(format("export SGE_ROOT=%s", getSgeRoot()))
                     .body.append(format("cd %s && TERM=rxvt ./inst_sge -x -noremote -auto %s/sge_setup.conf", getSgeRoot(), getRunDir()))
-                    //           .body.append(mpiMixin.customizeCommands())
-                    .execute();
+                            //           .body.append(mpiMixin.customizeCommands())
+                    .body.append(format("cat %s/sge_profile.conf >> /etc/bash.bashrc", getRunDir()))
+                    .body.append("source /etc/bash.bashrc")
+                    .newTask());
+
         }
+
 
 
     /*
@@ -180,6 +211,7 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
         return Boolean.TRUE.equals(entity.getAttribute(SgeNode.MASTER_FLAG));
     }
 
+
     @Override
     public void launch() {
 
@@ -189,6 +221,10 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
             log.info("Entity: {} is master now generateing Ssh key", entity.getId());
             String publicKey = generateSshKey();
             entity.setAttribute(SgeNode.MASTER_PUBLIC_SSH_KEY, publicKey);
+
+
+            //setup the initial Parallel environment
+            setupPE();
 
         } else {
             //wait for master ssh key to be set before executing.
@@ -212,42 +248,46 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
 
     @Override
     public void stop() {
-        newScript(ImmutableMap.of("usePidFile", false), STOPPING)
-                .body.append("pkill -9 sge_execd")
+
+        if (isMaster()) {
+            newScript(ImmutableMap.of("usePidFile", false), STOPPING)
+                    .body.append("pkill -9 sge_execd")
+                    .body.append("pkill -9 sge_qmaster")
+                    .execute();
+        } else {
+
+            newScript(ImmutableMap.of("usePidFile", false), STOPPING)
+                    .body.append("pkill -9 sge_execd")
+                    .execute();
+        }
+    }
+
+    @Override
+    public void addSlave(SgeNode slave) {
+
+        String hostname = slave.getAttribute(SgeNode.HOSTNAME);
+
+        newScript(format("adding slave %s to queue", hostname))
+                .body.append(format("%s -as %s", qconf(), hostname))
+                .body.append(format("%s -ah %s", qconf(), hostname))
                 .execute();
     }
 
     @Override
-    public void addSlave(String alias) {
-        // FIXME Do:
-//        mssh.execute('qconf -as %s' % node.alias)
-//
-//        def _add_sge_admin_host(self, node):
-//        mssh = self._master.ssh
-//        mssh.execute('qconf -ah %s' % node.alias)
-    }
+    public void removeSlave(SgeNode slave) {
 
-    @Override
-    public void removeSlave(String alias) {
-        // FIXME put in:
-//        master.ssh.execute('qconf -dattr hostgroup hostlist %s @allhosts' %
-//                node.alias)
-//        master.ssh.execute('qconf -purge queue slots all.q@%s' % node.alias)
-//        master.ssh.execute('qconf -dconf %s' % node.alias)
-//        master.ssh.execute('qconf -de %s' % node.alias)
-    }
+        String hostname = slave.getAttribute(SgeNode.HOSTNAME);
 
-    @Override
-    public void updateHosts(List<String> mpiHosts) {
+        newScript(format("removing slave %s from SGE queue", hostname))
+                .body.append(format("%s -dattr hostgroup hostlist %s @allhosts", qconf(), hostname))
+                .body.append(format("%s -purge queue slots all.q@%s", qconf(), hostname))
+                .body.append(format("%s -dconf %s", qconf(), hostname))
+                .body.append(format("%s -de %s", qconf(), hostname))
+                .execute();
 
-//        log.info("copying hosts inside ssh driver");
-//        getMachine().copyTo(Streams.newInputStreamWithContents(Strings.join(mpiHosts, "\n")), "mpi_hosts");
-
-        log.info("mpi hosts are : {}", entity.getAttribute(SgeNode.SGE_HOSTS).get(0));
-        //entity.setAttribute(SgeNode.MPI_HOSTS,mpiHosts);
-        log.info("mpi hosts are : {}", entity.getAttribute(SgeNode.SGE_HOSTS));
 
     }
+
 
     private void uploadPublicKey(String publicKey) {
 
@@ -329,13 +369,19 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
     }
 
     public Integer getNumOfProcessors() {
-        ScriptHelper fetchingProcessorsScript = newScript("gettingTheNoOfProcessors")
-                .body.append("cat /proc/cpuinfo | grep processor | wc -l")
-                .failOnNonZeroResultCode();
 
-        fetchingProcessorsScript.execute();
+        if (entity.getAttribute(SgeNode.NUM_OF_PROCESSORS) == null) {
+            ScriptHelper fetchingProcessorsScript = newScript("gettingTheNoOfProcessors")
+                    .body.append("cat /proc/cpuinfo | grep processor | wc -l")
+                    .failOnNonZeroResultCode();
 
-        return Integer.parseInt(fetchingProcessorsScript.getResultStdout().split("\\n")[0].trim());
+            fetchingProcessorsScript.execute();
+
+            return Integer.parseInt(fetchingProcessorsScript.getResultStdout().split("\\n")[0].trim());
+        } else {
+            return entity.getAttribute(SgeNode.NUM_OF_PROCESSORS);
+        }
+
     }
 
     @Override
@@ -357,7 +403,15 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
     // FIXME Use config key
     @Override
     public String getSgeRoot() {
-        return entity.getConfig(SgeNode.SGE_ROOT);
+        String sgeRoot = entity.getConfig(SgeNode.SGE_ROOT);
+        int lastIndex = sgeRoot.length() - 1;
+        if (sgeRoot.charAt(lastIndex) == '/') {
+
+            return sgeRoot.substring(0, lastIndex);
+
+        } else {
+            return sgeRoot;
+        }
     }
 
     @Override
@@ -367,13 +421,24 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
 
     @Override
     public String getArch() {
-        ScriptHelper getArchScript = newScript("querying io for arch").body.append(format("cd %s/ge*", getSgeRoot()))
-                .body.append("./util/arch").failOnNonZeroResultCode();
 
-        getArchScript.execute();
+        if (entity.getAttribute(SgeNode.SGE_ARCH) == null) {
+            ScriptHelper getArchScript = newScript("querying io for arch").body.append(format("%s/util/arch", getSgeRoot()))
+                    .failOnNonZeroResultCode();
 
-        return getArchScript.getResultStdout().split("\n")[0];
+            getArchScript.execute();
+
+            return getArchScript.getResultStdout().split("\n")[0];
+        } else {
+            return entity.getAttribute(SgeNode.SGE_ARCH);
+        }
     }
+
+    @Override
+    public String getPeName() {
+        return (Preconditions.checkNotNull(entity.getConfig(SgeNode.SGE_PE_NAME), "PE attribute is not set yet."));
+    }
+
 
     public SgeNode getMaster() {
         if (Boolean.TRUE.equals(entity.getConfig(SgeNode.MASTER_FLAG)))
@@ -381,4 +446,64 @@ public class SgeSshDriver extends JavaSoftwareProcessSshDriver implements SgeDri
         else
             return entity.getConfig(SgeNode.SGE_MASTER);
     }
+
+//    public boolean peExists(String peName) {
+//        int exitStatus = newScript("check if the parallel environment exist")
+//                .body.append(setEnv())
+//                .body.append(format("%s -sp %s", qconf(), peName))
+//                .execute();
+//        if (exitStatus != 0)
+//            log.warn("qconf returned non-zero eit status: " + exitStatus);
+//
+//        return (exitStatus == 0);
+//    }
+
+    @Override
+    public void updatePE(String peName, Integer numOfProcessors) {
+        log.info("updating pe: {} with num of processors: {}", peName, numOfProcessors);
+
+        newScript("updating the number of processors in the PE")
+                .body.append(setEnv())
+                .body.append(format("%s -mattr pe slots %s %s", qconf(), numOfProcessors, peName))
+                .failOnNonZeroResultCode()
+                .execute();
+
+
+    }
+
+
+    public void setupPE() {
+
+        //process the parallel environment template
+        String sgePETemplate = processTemplate(entity.getConfig(SgeNode.SGE_PE_TEMPLATE_URL));
+
+        DynamicTasks.queueIfPossible(SshEffectorTasks.put(format("%s/sge_pe.conf", getRunDir()))
+                .contents(sgePETemplate)
+                .summary("copying the PE configuration file")
+                .machine(getMachine()));
+
+        DynamicTasks.queueIfPossible(newScript("creating new parallel environment")
+                .body.append(setEnv())
+                .body.append(format("%s -Ap %s/sge_pe.conf", qconf(), getRunDir())).newTask());
+
+
+    }
+
+    //returns the qconf command with PATH
+    public String qconf() {
+        String sgeRoot = getSgeRoot();
+        String arch = format("`%s/util/arch`", sgeRoot);
+
+        String qconfCmd = Strings.join(ImmutableList.of(sgeRoot, "/bin/", arch, "/qconf"), "");
+
+        return (qconfCmd);
+
+    }
+
+    //returns the commands necessary to get the environment variables
+    public String setEnv() {
+        return (format("source %s/sge_profile.conf", getRunDir()));
+    }
+
+
 }

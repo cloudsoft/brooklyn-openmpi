@@ -1,5 +1,5 @@
-pe_name           %s
-slots             %s
+pe_name           ${driver.peName}
+slots             1
 user_lists        NONE
 xuser_lists       NONE
 start_proc_args   /bin/true
