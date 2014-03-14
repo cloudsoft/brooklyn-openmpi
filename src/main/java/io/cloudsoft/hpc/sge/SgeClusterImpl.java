@@ -1,7 +1,6 @@
 package io.cloudsoft.hpc.sge;
 
 import brooklyn.entity.Entity;
-import brooklyn.entity.basic.Entities;
 import brooklyn.entity.basic.EntityInternal;
 import brooklyn.entity.group.AbstractMembershipTrackingPolicy;
 import brooklyn.entity.group.DynamicClusterImpl;
@@ -10,10 +9,8 @@ import brooklyn.event.SensorEvent;
 import brooklyn.event.SensorEventListener;
 import brooklyn.location.Location;
 import brooklyn.util.collections.MutableMap;
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,78 +24,11 @@ import static brooklyn.util.JavaGroovyEquivalents.groovyTruth;
 public class SgeClusterImpl extends DynamicClusterImpl implements SgeCluster {
 
     private static final Logger log = LoggerFactory.getLogger(SgeClusterImpl.class);
-    private final AtomicBoolean hostsInitialized = new AtomicBoolean();
     private AtomicBoolean masterSshgenerated = new AtomicBoolean();
-    private Map<Entity, String> onlineMembers = Maps.newConcurrentMap();
-    private volatile Integer totalNumberOfProcessors = 0;
 
     public void init() {
         log.info("Initializing the SGE Cluster.");
         super.init();
-
-        subscribeToMembers(this, SgeNode.HOSTNAME, new SensorEventListener<String>() {
-            @Override
-            public void onEvent(SensorEvent<String> stringSensorEvent) {
-                if (!hostsInitialized.get()) {
-                    if (stringSensorEvent.getValue() != null) {
-                        onlineMembers.put(stringSensorEvent.getSource(), stringSensorEvent.getValue());
-
-                        if (onlineMembers.size() == getConfig(INITIAL_SIZE)) {
-                            synchronized (SgeClusterImpl.this) {
-
-                                Entities.invokeEffectorListWithArgs(SgeClusterImpl.this, getMembers(), SgeNode.UPDATE_HOSTS, onlineMembers.values());
-
-                            }
-                            hostsInitialized.set(true);
-                        }
-                    }
-                }
-            }
-
-        });
-
-        subscribeToMembers(this, SgeNode.NUM_OF_PROCESSORS, new SensorEventListener<Integer>() {
-            @Override
-            public void onEvent(SensorEvent<Integer> integerSensorEvent) {
-                if (integerSensorEvent.getValue() != null) {
-                    synchronized (SgeClusterImpl.this) {
-                        totalNumberOfProcessors += integerSensorEvent.getValue();
-                        setAttribute(SgeCluster.TOTAL_NUMBER_OF_PROCESSORS, totalNumberOfProcessors);
-                    }
-
-                }
-            }
-        });
-
-
-//        subscribeToMembers(this, SgeNode.SERVICE_UP, new SensorEventListener<Boolean>() {
-//            @Override
-//            public void onEvent(SensorEvent<Boolean> event) {
-//                // FIXME comments about why have two subscriptions
-//                // FIXME Need to track memberRemoved.
-//                //       Could/should extract these add/remove blocks into re-usable methods: onMemberDown/onMemberUp?
-//                if (hostsInitialized.get()) {
-//                    SgeNode member = (SgeNode) event.getSource();
-//                    if (Boolean.TRUE.equals(event.getValue())) {
-//                        if (!onlineMembers.containsKey(member)) {
-//                            SgeNode master = getMaster();
-//                            log.info("adding {} to the SGE Cluster", member.getId());
-//                            Entities.invokeEffectorWithArgs(SgeClusterImpl.this, master, SgeNode.ADD_SLAVE, member);
-//                            Entities.invokeEffectorWithArgs(SgeClusterImpl.this, master, SgeNode.UPDATE_PE, "mpi_pe", totalNumberOfProcessors);
-//                        }
-//                    } else if (Boolean.FALSE.equals(event.getValue())) {
-//                        // FIXME Need to ensure concurrent calls from slave.stop() to removeSlave() are idempotent
-//
-//                        if (onlineMembers.containsKey(member)) {
-//                            SgeNode master = getMaster();
-//                            log.info("removing {} from the SGE Cluster", member.getId());
-//                            Entities.invokeEffectorWithArgs(SgeClusterImpl.this, master, SgeNode.REMOVE_SLAVE, member);
-//                            Entities.invokeEffectorWithArgs(SgeClusterImpl.this, master, SgeNode.UPDATE_PE, "mpi_pe", totalNumberOfProcessors);
-//                        }
-//                    }
-//                }
-//            }
-//        });
     }
 
     @Override
@@ -122,7 +52,7 @@ public class SgeClusterImpl extends DynamicClusterImpl implements SgeCluster {
             }
 
             // set the master node for each new entity.
-            ((EntityInternal) member).setConfig(SgeNode.SGE_MASTER, (SgeNode) master);
+            ((EntityInternal) member).setAttribute(SgeNode.SGE_MASTER, (SgeNode) master);
 
         }
 
@@ -133,37 +63,30 @@ public class SgeClusterImpl extends DynamicClusterImpl implements SgeCluster {
         if (log.isTraceEnabled()) log.trace("For {}, considering membership of {} which is in locations {}",
                 new Object[]{this, member, member.getLocations()});
         if (belongsInServerPool(member)) {
-            Map<Entity, String> nodes = getAttribute(SGI_CLUSTER_NODE);
+            Map<Entity, String> nodes = getAttribute(SGE_CLUSTER_NODES);
             if (nodes == null) nodes = Maps.newLinkedHashMap();
             String address = getAddressOfEntity(member);
             if (address == null) {
                 log.error("Unable to construct hostname:port representation for {} ({}:{}); skipping in {}");
             } else {
-                SgeNode master = getAttribute(SgeCluster.MASTER_NODE);
-                log.info("Adding new Sge member to {}: {}; {}", new Object[]{this, member, address});
 
                 nodes.put(member, address);
-                setAttribute(SGI_CLUSTER_NODE, nodes);
+                setAttribute(SGE_CLUSTER_NODES, nodes);
 
-                Entities.invokeEffectorWithArgs(SgeClusterImpl.this, master, SgeNode.ADD_SLAVE, member);
-                Entities.invokeEffectorWithArgs(SgeClusterImpl.this, master, SgeNode.UPDATE_PE, "mpi_pe", totalNumberOfProcessors);
 
             }
         } else {
-            Map<Entity, String> nodes = getAttribute(SGI_CLUSTER_NODE);
+            Map<Entity, String> nodes = getAttribute(SGE_CLUSTER_NODES);
             if (nodes != null) {
                 String address = nodes.remove(member);
-                setAttribute(SGI_CLUSTER_NODE, nodes);
+                setAttribute(SGE_CLUSTER_NODES, nodes);
                 log.info("Removing Sge member from {}: {}; {}", new Object[]{this, member, address});
 
                 log.info("Updating sge hosts to all members");
 
                 SgeNode master = getAttribute(MASTER_NODE);
 
-                Entities.invokeEffectorWithArgs(this, master, SgeNode.UPDATE_HOSTS, Optional.of(Lists.newArrayList(nodes.values())).get());
 
-                Entities.invokeEffectorWithArgs(SgeClusterImpl.this, master, SgeNode.REMOVE_SLAVE, member);
-                Entities.invokeEffectorWithArgs(SgeClusterImpl.this, master, SgeNode.UPDATE_PE, "mpi_pe", totalNumberOfProcessors);
             }
         }
         if (log.isTraceEnabled()) log.trace("Done {} checkEntity {}", this, member);
@@ -191,7 +114,7 @@ public class SgeClusterImpl extends DynamicClusterImpl implements SgeCluster {
 
         Map<String, Object> flags = MutableMap.<String, Object>builder()
                 .put("name", "Controller targets tracker")
-                .put("sensorsToTrack", ImmutableSet.of(SgeNode.ADDRESS))
+                .put("sensorsToTrack", ImmutableSet.of(SgeNode.SERVICE_UP))
                 .build();
 
         AbstractMembershipTrackingPolicy serverPoolMemberTrackerPolicy = new AbstractMembershipTrackingPolicy(flags) {

@@ -1,15 +1,13 @@
-import MPI.MPICluster;
-import MPI.MPINode;
+import io.cloudsoft.hpc.sge.SgeCluster;
+import io.cloudsoft.hpc.sge.SgeNode;
 import brooklyn.entity.BrooklynMgmtContextTestSupport;
 import brooklyn.entity.basic.ApplicationBuilder;
 import brooklyn.entity.basic.Entities;
 import brooklyn.entity.proxying.EntitySpec;
-import brooklyn.location.Location;
 import brooklyn.location.LocationSpec;
 import brooklyn.location.MachineProvisioningLocation;
 import brooklyn.location.NoMachinesAvailableException;
 import brooklyn.location.basic.LocalhostMachineProvisioningLocation;
-import brooklyn.location.basic.SshMachineLocation;
 import brooklyn.management.ManagementContext;
 import brooklyn.test.entity.TestApplication;
 import com.google.common.collect.ImmutableList;
@@ -26,7 +24,7 @@ public class MPIEntityTest extends BrooklynMgmtContextTestSupport {
 
     private TestApplication app;
     private MachineProvisioningLocation testLocation;
-    private MPICluster cluster;
+    private SgeCluster cluster;
     private ManagementContext managementContext;
 
     @BeforeMethod(alwaysRun = true)
@@ -45,9 +43,9 @@ public class MPIEntityTest extends BrooklynMgmtContextTestSupport {
 
     @Test(groups = "installation")
     public void testInstallation() throws NoMachinesAvailableException {
-        cluster = app.createAndManageChild(EntitySpec.create(MPICluster.class)
-                .configure(MPICluster.INITIAL_SIZE, 1)
-                .configure(MPICluster.MEMBER_SPEC, EntitySpec.create(MPINode.class)));
+        cluster = app.createAndManageChild(EntitySpec.create(SgeCluster.class)
+                .configure(SgeCluster.INITIAL_SIZE, 1)
+                .configure(SgeCluster.MEMBER_SPEC, EntitySpec.create(SgeNode.class)));
 
 
         app.start(ImmutableList.of(testLocation.obtain(ImmutableMap.of())));

@@ -7,7 +7,6 @@ import brooklyn.entity.annotation.EffectorParam;
 import brooklyn.entity.basic.ConfigKeys;
 import brooklyn.entity.basic.MethodEffector;
 import brooklyn.entity.basic.SoftwareProcess;
-import brooklyn.entity.java.UsesJmx;
 import brooklyn.entity.proxying.ImplementedBy;
 import brooklyn.event.AttributeSensor;
 import brooklyn.event.basic.BasicAttributeSensorAndConfigKey;
@@ -20,12 +19,13 @@ import java.util.List;
 import java.util.Map;
 
 @ImplementedBy(SgeNodeImpl.class)
-public interface SgeNode extends SoftwareProcess, UsesJmx {
+public interface SgeNode extends SoftwareProcess {
 
 
+    AttributeSensor<String> SGE_NODE_ALIAS = Sensors.newStringSensor("sge.node.alias", "The alias for the SGE node");
     ConfigKey<String> SGE_CLUSTER_NAME = ConfigKeys.newStringConfigKey("sge.cluster.name", "name of the sge cluster", "brooklyn_sge_cluster");
     BasicAttributeSensorAndConfigKey<Boolean> MASTER_FLAG = new BasicAttributeSensorAndConfigKey<Boolean>(Boolean.class, "sge.masterFlag", "indicates whether this node is the master", Boolean.FALSE);
-    ConfigKey<SgeNode> SGE_MASTER = ConfigKeys.newConfigKey(SgeNode.class, "sge.master.node");
+    AttributeSensor<SgeNode> SGE_MASTER = Sensors.newSensor(SgeNode.class, "sge.master.node");
     ConfigKey<String> SGE_ROOT = ConfigKeys.newStringConfigKey("sge.root", "name of the sge root folder", "/opt/sge6/");
     ConfigKey<String> SGE_ADMIN = ConfigKeys.newStringConfigKey("sge.admin", "name of the sge admin user", "sgeadmin");
     ConfigKey<String> SGE_PE_NAME = ConfigKeys.newStringConfigKey("sge.pe.name", "name of the parallel environment for SGE");
@@ -35,17 +35,15 @@ public interface SgeNode extends SoftwareProcess, UsesJmx {
     }, "sge.hosts", "Hostnames of all active sge nodes in the cluster (public hostname/IP)");
 
     //sensors to be fetched using qstat -f -xml
+    AttributeSensor<String> SGE_QSTAT_QTYPE = Sensors.newStringSensor("sge.qstat.qtype");
+    AttributeSensor<String> SGE_QSTAT_SLOTS_USED = Sensors.newStringSensor("sge.qstat.slots_used");
+    AttributeSensor<String> SGE_QSTAT_SLOTS_RESERVED = Sensors.newStringSensor("sge.qstat.slots.reserved");
+    AttributeSensor<String> SGE_QSTAT_SLOTS_TOTAL = Sensors.newStringSensor("sge.qstat.slots.total");
+    AttributeSensor<String> SGE_QSTAT_LOAD_AVG = Sensors.newStringSensor("sge.qstat.load.avg");
+    AttributeSensor<String> SGE_QSTAT_NAME = Sensors.newStringSensor("sge.qstat.name");
+    AttributeSensor<String> SGE_QSTAT_ARCH = Sensors.newStringSensor("sge.qstat.arch");
 
-    AttributeSensor<String> SGE_QUEUE_QTYPE = Sensors.newStringSensor("sge.queue.qtype");
-    AttributeSensor<String> SGE_QUEUE_SLOTS_USED = Sensors.newStringSensor("sge.queue.slots_used");
-    AttributeSensor<String> SGE_QUEUE_SLOTS_RESERVED = Sensors.newStringSensor("sge.queue.slots.reserved");
-    AttributeSensor<String> SGE_QUEUE_SLOTS_TOTAL = Sensors.newStringSensor("sge.queue.slots.total");
-    AttributeSensor<String> SGE_QUEUE_LOAD_AVG = Sensors.newStringSensor("sge.queue.load.avg");
-    AttributeSensor<String> SGE_QUEUE_NAME = Sensors.newStringSensor("sge.queue.name");
-    AttributeSensor<String> SGE_QUEUE_ARCH = Sensors.newStringSensor("sge.queue.arch");
-
-
-
+    //sensor to be fecthed using qhost -xml
     AttributeSensor<String> SGE_QHOST_NUM_PROC = Sensors.newStringSensor("sge.qhost.num.proc");
     AttributeSensor<String> SGE_QHOST_LOAD_AVG = Sensors.newStringSensor("sge.qhost.load.avg");
     AttributeSensor<String> SGE_QHOST_MEM_TOTAL = Sensors.newStringSensor("sge.qhost.mem.total");
@@ -70,6 +68,8 @@ public interface SgeNode extends SoftwareProcess, UsesJmx {
     public static final MethodEffector<Void> UPDATE_PE = new MethodEffector<Void>(SgeNode.class, "updatePE");
     public static final MethodEffector<Void> ADD_SLAVE = new MethodEffector<Void>(SgeNode.class, "addSlave");
     public static final MethodEffector<Void> REMOVE_SLAVE = new MethodEffector<Void>(SgeNode.class, "removeSlave");
+    public static final MethodEffector<Void> INSTALL_SLAVE_EXEC_HOST = new MethodEffector<Void>(SgeNode.class, "installSlaveExecHost");
+
     AttributeSensor<Integer> NUM_OF_PROCESSORS = Sensors.newIntegerSensor("sge.num_of_processors", "attribute that shows the number of proceesors");
 
     @SetFromFlag("SGEConfigTemplate")
@@ -107,4 +107,5 @@ public interface SgeNode extends SoftwareProcess, UsesJmx {
     public String getPEname();
 
     public String getSgeRoot();
+
 }

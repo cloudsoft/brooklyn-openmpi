@@ -8,7 +8,9 @@ import brooklyn.event.feed.ssh.SshPollValue;
 import brooklyn.event.feed.ssh.SshValueFunctions;
 import brooklyn.location.Location;
 import brooklyn.location.basic.SshMachineLocation;
+import brooklyn.util.exceptions.Exceptions;
 import brooklyn.util.stream.Streams;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Function;
 import com.google.common.base.Functions;
 import com.google.common.base.Optional;
@@ -40,51 +42,38 @@ public class SgeNodeImpl extends SoftwareProcessImpl implements SgeNode {
     private AtomicBoolean setNoOfProcessors;
     private transient SshFeed sshFeed;
 
-    private static Function<SshPollValue, String> qstatInfoFunction(final String queueName, final String subnetHost, final String field) {
+    @VisibleForTesting
+    static Function<SshPollValue, String> qstatInfoFunction(final String queueName, final String alias, final String field) {
         return Functions.compose(new Function<String, String>() {
             @Override
             public String apply(@Nullable String input) {
 
-                //remote trailling executed script status to parse the xml output correctly
+                //remote trailing executed script status to parse the xml output correctly
                 String xmlString = input.substring(0, input.lastIndexOf("</job_info>") + 11);
 
-
-                DocumentBuilder builder;
-
-                //FIXME add a better way to detect null (use of Optional maybe?)
-                String xpathOut = "";
-
                 //FIXME use aliases instead of subnethostnames and add the queue name to the query.
-                //add dashes to subnethost
-                String subnetHostToQuery = subnetHost.replace(".", "-");
+
 
                 try {
-                    builder = factory.newDocumentBuilder();
+                    DocumentBuilder builder = factory.newDocumentBuilder();
                     Document document = builder.parse(Streams.newInputStreamWithContents(xmlString));
 
-
-                    XPath xpath = xpf.newXPath();
-
                     //query the xml for the requested field.
-                    Node queueNode = (Node) xpath.evaluate(format("//Queue-List[contains(name,'%s')]/%s", subnetHostToQuery, field), document, XPathConstants.NODE);
+                    XPath xpath = xpf.newXPath();
+                    Node queueNode = (Node) xpath.evaluate(format("//Queue-List[contains(name,'%s')]/%s", alias, field), document, XPathConstants.NODE);
 
-
-                    xpathOut = queueNode.getTextContent();
-
+                    return queueNode.getTextContent();
 
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    throw Exceptions.propagate(e);
                 }
-
-                //return the query result for the queue.
-                return xpathOut;
 
             }
         }, SshValueFunctions.stdout());
     }
 
 
-    private static Function<SshPollValue, String> qhostInfoFunction(final String queueName, final String subnetHost, final String field) {
+    private static Function<SshPollValue, String> qhostInfoFunction(final String queueName, final String alias, final String field) {
         return Functions.compose(new Function<String, String>() {
             @Override
             public String apply(@Nullable String input) {
@@ -92,36 +81,22 @@ public class SgeNodeImpl extends SoftwareProcessImpl implements SgeNode {
                 //remote trailling executed script status to parse the xml output correctly
                 String xmlString = input.substring(0, input.lastIndexOf("</qhost>") + 8);
 
-
-                DocumentBuilder builder;
-
-                //FIXME add a better way to detect null (use of Optional maybe?)
-                String xpathOut = "";
-
                 //FIXME use aliases instead of subnethostnames and add the queue name to the query.
-                //add dashes to subnethost
-                String subnetHostToQuery = subnetHost.replace(".", "-");
+
 
                 try {
-                    builder = factory.newDocumentBuilder();
+                    DocumentBuilder builder = factory.newDocumentBuilder();
                     Document document = builder.parse(Streams.newInputStreamWithContents(xmlString));
 
-
                     XPath xpath = xpf.newXPath();
+                    Node queueNode = (Node) xpath.evaluate(format("//host[contains(@name,'%s')]/hostvalue[@name='%s']", alias, field), document, XPathConstants.NODE);
 
-                    //query the xml for the requested field.
-                    Node queueNode = (Node) xpath.evaluate(format("//host[contains(@name,'%s')]/hostvalue[@name=%s]", subnetHostToQuery, field), document, XPathConstants.NODE);
-
-
-                    xpathOut = queueNode.getTextContent();
-
+                    return queueNode.getTextContent();
 
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    throw Exceptions.propagate(e);
                 }
 
-                //return the query result for the queue.
-                return xpathOut;
 
             }
         }, SshValueFunctions.stdout());
@@ -140,7 +115,7 @@ public class SgeNodeImpl extends SoftwareProcessImpl implements SgeNode {
 
     @Override
     protected void doStop() {
-        SgeNode master = getConfig(SGE_MASTER);
+        SgeNode master = getAttribute(SGE_MASTER);
 
         if (!isMaster()) {
             Entities.invokeEffectorWithArgs(this, master, SgeNode.REMOVE_SLAVE, getAttribute(SgeNode.HOSTNAME));
@@ -182,6 +157,7 @@ public class SgeNodeImpl extends SoftwareProcessImpl implements SgeNode {
         return getConfig(SgeNode.SGE_PE_NAME);
     }
 
+
     @Override
     public String getSgeRoot() {
         return getConfig(SGE_ROOT);
@@ -192,9 +168,7 @@ public class SgeNodeImpl extends SoftwareProcessImpl implements SgeNode {
         super.connectSensors();
         connectServiceUpIsRunning();
 
-
         // Find an SshMachineLocation for the UPTIME feed
-
 
         Optional<Location> location = Iterables.tryFind(getLocations(), Predicates.instanceOf(SshMachineLocation.class));
         if (!location.isPresent())
@@ -204,65 +178,64 @@ public class SgeNodeImpl extends SoftwareProcessImpl implements SgeNode {
         String qstatCmd = format("source %s/sge_profile.conf;qstat -f -xml", getDriver().getRunDir());
         String qhostCmd = format("source %s/sge_profile.conf;qhost -xml", getDriver().getRunDir());
 
-        String subnetHost = getAttribute(SgeNode.SUBNET_ADDRESS);
-
+        String alias = getAttribute(SgeNode.SGE_NODE_ALIAS);
 
         sshFeed.builder()
                 .entity(this)
                 .machine(machine)
                 .period(5, TimeUnit.SECONDS)
-                .poll(new SshPollConfig<String>(SgeNode.SGE_QUEUE_LOAD_AVG)
+                .poll(new SshPollConfig<String>(SgeNode.SGE_QSTAT_LOAD_AVG)
                         .command(qstatCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qstatInfoFunction("all.q", subnetHost, "load_avg")))
-                .poll(new SshPollConfig<String>(SgeNode.SGE_QUEUE_QTYPE)
+                        .onSuccess(qstatInfoFunction("all.q", alias, "load_avg")))
+                .poll(new SshPollConfig<String>(SgeNode.SGE_QSTAT_QTYPE)
                         .command(qstatCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qstatInfoFunction("all.q", subnetHost, "qtype")))
-                .poll(new SshPollConfig<String>(SgeNode.SGE_QUEUE_SLOTS_USED)
+                        .onSuccess(qstatInfoFunction("all.q", alias, "qtype")))
+                .poll(new SshPollConfig<String>(SgeNode.SGE_QSTAT_SLOTS_USED)
                         .command(qstatCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qstatInfoFunction("all.q", subnetHost, "slots_used")))
-                .poll(new SshPollConfig<String>(SgeNode.SGE_QUEUE_SLOTS_RESERVED)
+                        .onSuccess(qstatInfoFunction("all.q", alias, "slots_used")))
+                .poll(new SshPollConfig<String>(SgeNode.SGE_QSTAT_SLOTS_RESERVED)
                         .command(qstatCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qstatInfoFunction("all.q", subnetHost, "slots_resv")))
-                .poll(new SshPollConfig<String>(SgeNode.SGE_QUEUE_SLOTS_TOTAL)
+                        .onSuccess(qstatInfoFunction("all.q", alias, "slots_resv")))
+                .poll(new SshPollConfig<String>(SgeNode.SGE_QSTAT_SLOTS_TOTAL)
                         .command(qstatCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qstatInfoFunction("all.q", subnetHost, "slots_total")))
-                .poll(new SshPollConfig<String>(SgeNode.SGE_QUEUE_NAME)
+                        .onSuccess(qstatInfoFunction("all.q", alias, "slots_total")))
+                .poll(new SshPollConfig<String>(SgeNode.SGE_QSTAT_NAME)
                         .command(qstatCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qstatInfoFunction("all.q", subnetHost, "name")))
-                .poll(new SshPollConfig<String>(SgeNode.SGE_QUEUE_ARCH)
+                        .onSuccess(qstatInfoFunction("all.q", alias, "name")))
+                .poll(new SshPollConfig<String>(SgeNode.SGE_QSTAT_ARCH)
                         .command(qstatCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qstatInfoFunction("all.q", subnetHost, "arch")))
+                        .onSuccess(qstatInfoFunction("all.q", alias, "arch")))
                 .poll(new SshPollConfig<String>(SgeNode.SGE_QHOST_LOAD_AVG)
                         .command(qhostCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qhostInfoFunction("all.q", subnetHost, "load_avg")))
+                        .onSuccess(qhostInfoFunction("all.q", alias, "load_avg")))
                 .poll(new SshPollConfig<String>(SgeNode.SGE_QHOST_NUM_PROC)
                         .command(qhostCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qhostInfoFunction("all.q", subnetHost, "num_proc")))
+                        .onSuccess(qhostInfoFunction("all.q", alias, "num_proc")))
                 .poll(new SshPollConfig<String>(SgeNode.SGE_QHOST_MEM_TOTAL)
                         .command(qhostCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qhostInfoFunction("all.q", subnetHost, "mem_total")))
+                        .onSuccess(qhostInfoFunction("all.q", alias, "mem_total")))
                 .poll(new SshPollConfig<String>(SgeNode.SGE_QHOST_MEM_USED)
                         .command(qhostCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qhostInfoFunction("all.q", subnetHost, "mem_used")))
+                        .onSuccess(qhostInfoFunction("all.q", alias, "mem_used")))
                 .poll(new SshPollConfig<String>(SgeNode.SGE_QHOST_SWAP_TOTAL)
                         .command(qhostCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qhostInfoFunction("all.q", subnetHost, "swap_total")))
+                        .onSuccess(qhostInfoFunction("all.q", alias, "swap_total")))
                 .poll(new SshPollConfig<String>(SgeNode.SGE_QHOST_SWAP_USED)
                         .command(qhostCmd)
                         .onFailureOrException(Functions.constant("error"))
-                        .onSuccess(qhostInfoFunction("all.q", subnetHost, "swap_used")))
+                        .onSuccess(qhostInfoFunction("all.q", alias, "swap_used")))
 
                 .build();
 
