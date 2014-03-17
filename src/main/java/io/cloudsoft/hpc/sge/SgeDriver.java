@@ -20,10 +20,7 @@ public interface SgeDriver extends VanillaSoftwareProcessDriver {
 
     public void addSlave(SgeNode slave);
 
-    public void updatePE(String peName, Integer numOfProcessors);
-
     public String getRunDir();
-
 
 
 }

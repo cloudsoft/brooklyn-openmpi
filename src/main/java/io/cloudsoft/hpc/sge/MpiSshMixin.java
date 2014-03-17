@@ -6,7 +6,6 @@ import brooklyn.entity.drivers.EntityDriver;
 import brooklyn.entity.drivers.downloads.DownloadResolver;
 import brooklyn.location.basic.SshMachineLocation;
 import brooklyn.management.ManagementContext;
-import brooklyn.util.ssh.BashCommands;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import org.slf4j.LoggerFactory;
@@ -30,11 +29,11 @@ public class MpiSshMixin {
     public List<String> installCommands() {
         if (driver.isMaster()) {
             Entity entity = driver.getEntity();
-            ManagementContext managementContext = ((EntityInternal)driver.getEntity()).getManagementContext();
+            ManagementContext managementContext = ((EntityInternal) driver.getEntity()).getManagementContext();
 
             String mpiVersion = entity.getConfig(SgeNode.MPI_VERSION);
             DownloadResolver mpiDownloadResolver = managementContext.getEntityDownloadsManager().newDownloader(
-                    (EntityDriver)this, "mpi", ImmutableMap.of("addonversion", mpiVersion));
+                    (EntityDriver) this, "mpi", ImmutableMap.of("addonversion", mpiVersion));
             List<String> mpiUrls = mpiDownloadResolver.getTargets();
             String mpiSaveAs = mpiDownloadResolver.getFilename();
 

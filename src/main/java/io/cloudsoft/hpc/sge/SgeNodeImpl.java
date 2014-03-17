@@ -147,10 +147,6 @@ public class SgeNodeImpl extends SoftwareProcessImpl implements SgeNode {
         return getConfig(SgeNode.SGE_CLUSTER_NAME);
     }
 
-    @Override
-    public void updatePE(String peName, Integer numOfProcessors) {
-        getDriver().updatePE(peName, numOfProcessors);
-    }
 
     @Override
     public String getPEname() {

@@ -103,7 +103,7 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
         }
 
         //set the No of processors this machine has
-        entity.setAttribute(SgeNode.NUM_OF_PROCESSORS, getNumOfProcessors());
+        entity.setAttribute(SgeNode.SGE_NUM_SLOTS_PER_NODE, getNumOfProcessors());
     }
 
     public List<String> mountNfsDir(String host, String remoteDir, String mountPoint) {
@@ -117,6 +117,7 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
 
     @Override
     public void customize() {
+
         // FIXME Remove duplication for master/slave paths?
 
         DynamicTasks.queueIfPossible(SshEffectorTasks.ssh(format("mkdir -p %s", getRunDir())).machine(getMachine()).summary("create the run dir"));
@@ -128,6 +129,9 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
         entity.setAttribute(SgeNode.SGE_NODE_ALIAS, Optional.of(fetchAliasScript.getResultStdout().split("\\n")[0]).get());
 
         if (isMaster()) {
+
+            //set the initial total num of processors for the PE
+            entity.setAttribute(SgeNode.SGE_TOTAL_NUM_OF_SLOTS, getNumOfProcessors());
 
             //get master's hostname
             String alias = entity.getAttribute(SgeNode.SGE_NODE_ALIAS);
@@ -149,14 +153,13 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
                     .machine(getMachine())
                     .summary("sending the processed profile template to the machine"));
 
-
             DynamicTasks.queueIfPossible(newScript(CUSTOMIZING)
                     .failOnNonZeroResultCode()
                     .body.append(startNfsServer(getSgeRoot()))
                     .body.append(format("export SGE_ROOT=%s", getSgeRoot()))
                             //copy the sge_setup.conf to SGE_ROOT
                     .body.append(format("cp %s/sge_setup.conf %s/", getRunDir(), getSgeRoot()))
-                    .body.append(format("cd %s && TERM=rxvt ./inst_sge -m -x -noremote -jmx -auto %s/sge_setup.conf", getSgeRoot(), getRunDir()))
+                    .body.append(format("cd %s && TERM=rxvt ./inst_sge -m -x -noremote -auto %s/sge_setup.conf", getSgeRoot(), getRunDir()))
                             //          .body.append(mpiMixin.customizeCommands())
                     .body.append(format("cat %s/sge_profile.conf >> /etc/bash.bashrc", getRunDir()))
                     .body.append(format("source /etc/bash.bashrc"))
@@ -168,7 +171,7 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
             String alias = entity.getAttribute(SgeNode.SGE_NODE_ALIAS);
             // wait for the master, so our mount point and inst_sge etc are ready
             // TODO assumes that SgeMaster is configured identically, to have the same dir exported as we want to mount
-            SgeNode master = entity.getAttribute(SgeNode.SGE_MASTER);
+            SgeNode master = getMaster();
             attributeWhenReady(master, SgeNode.SERVICE_UP);
 
             //mount master's sge root on NFS
@@ -180,6 +183,7 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
                     .summary(format("mounting SGE_ROOT on slave: %s", entity.getId()))
                     .newTask());
 
+            //add thew new slave node to the master
             DynamicTasks.queueIfPossible(Entities.invokeEffectorWithArgs(entity, master, SgeNode.ADD_SLAVE, entity));
 
 
@@ -228,24 +232,31 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
             //setup the initial Parallel environment
             setupPE();
 
+
         } else {
             //wait for master ssh key to be set before executing.
 
-            SgeNode master = entity.getAttribute(SgeNode.SGE_MASTER);
+            SgeNode master = getMaster();
             log.info("Entity: {} is not master copying Ssh key from master (when available) {}", entity.getId(), master);
 
             String publicKey = attributeWhenReady(master, SgeNode.MASTER_PUBLIC_SSH_KEY);
             uploadPublicKey(publicKey);
+
+            //add the new node to the parallel environemtn
+            Integer numOfProcessors = getNumOfProcessors();
+
         }
     }
 
     @Override
     public boolean isRunning() {
-//        int result = newScript(CHECK_RUNNING)
-//                .body.append("mpicc " + connectivityTesterPath + " -o connectivity") // FIXME
-//                .body.append("mpirun ./connectivity")
-//                .execute();
-        return (true);
+
+        ///opt/sge6/utilbin/linux-x64/checkprog -ppid
+
+        return (newScript(CHECK_RUNNING)
+                .body.append(format("%s/utilbin/%s/checkprog -ppid", getSgeRoot(), getArch()))
+                .execute() == 0);
+
     }
 
     @Override
@@ -269,6 +280,14 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
 
         String hostname = slave.getAttribute(SgeNode.HOSTNAME);
         String alias = slave.getAttribute(SgeNode.SGE_NODE_ALIAS);
+        Integer numOfProcessors = slave.getAttribute(SgeNode.SGE_NUM_SLOTS_PER_NODE);
+
+
+        //update the total number of processors
+        entity.setAttribute(SgeNode.SGE_TOTAL_NUM_OF_SLOTS, entity.getAttribute(SgeNode.SGE_TOTAL_NUM_OF_SLOTS) + numOfProcessors);
+
+        //get the total number of processors
+        Integer totalNumOfProcessors = entity.getAttribute(SgeNode.SGE_TOTAL_NUM_OF_SLOTS);
 
         log.warn("adding new slave {} to the SGE Cluster", slave.getId());
 
@@ -276,6 +295,7 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
         DynamicTasks.queueIfPossible(newScript(format("adding slave %s (%s) to queue", hostname, alias))
                 .body.append(format("%s -as %s", qconf(), alias))
                 .body.append(format("%s -ah %s", qconf(), alias))
+                .body.append(format("%s -mattr pe slots %s %s", qconf(), totalNumOfProcessors, getPeName()))
                 .gatherOutput(true)
                 .newTask());
 
@@ -307,32 +327,17 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
 
             getMachine().copyTo(Streams.newInputStreamWithContents(myKey), "id_rsa.pub.txt");
             //get master node
-            SgeNode master = entity.getAttribute(SgeNode.SGE_MASTER);
+            SgeNode master = getMaster();
 
             newScript("uploadMasterSshKey")
                     .body.append("mkdir -p ~/.ssh/")
                     .body.append("chmod 700 ~/.ssh/")
                     .body.append(BashCommands.executeCommandThenAsUserTeeOutputToFile("echo \"StrictHostKeyChecking no\"", "root", "/etc/ssh/ssh_config"))
-                    // commented because we do not need slave ssh keys to be copied to master
-                    //       .body.append("ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -C \"Open MPI\" -P \"\"")
-                    //       .body.append("cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys")
                     .body.append("cat id_rsa.pub.txt >> ~/.ssh/authorized_keys")
                     .body.append("chmod 600 ~/.ssh/authorized_keys")
-                    //       .body.append("cp ~/.ssh/id_rsa.pub id_rsa.pub." + entity.getId())
                     .failOnNonZeroResultCode()
                     .execute();
 
-
-            //adding slave key to master
-            //getMachine().copyFrom("id_rsa.pub." + entity.getId(), "id_rsa.pub." + entity.getId());
-
-            //SshMachineLocation loc = (SshMachineLocation) Iterables.find(master.getLocations(), Predicates.instanceOf(SshMachineLocation.class));
-            //loc.copyTo(new File("id_rsa.pub." + entity.getId()), "id_rsa.pub." + entity.getId());
-            //loc.execCommands("add new slave ssh key to master",
-            //        ImmutableList.of(
-            //                "chmod 700 ~/.ssh/",
-            //                "cat id_rsa.pub." + entity.getId() + " >> ~/.ssh/authorized_keys",
-            //                "chmod 600 ~/.ssh/authorized_keys"));
 
         } catch (IOException i) {
             log.debug("Error parsing the file {}", i.getMessage());
@@ -379,7 +384,7 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
 
     public Integer getNumOfProcessors() {
 
-        if (entity.getAttribute(SgeNode.NUM_OF_PROCESSORS) == null) {
+        if (entity.getAttribute(SgeNode.SGE_NUM_SLOTS_PER_NODE) == null) {
             ScriptHelper fetchingProcessorsScript = newScript("gettingTheNoOfProcessors")
                     .body.append("cat /proc/cpuinfo | grep processor | wc -l")
                     .failOnNonZeroResultCode();
@@ -388,7 +393,7 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
 
             return Integer.parseInt(fetchingProcessorsScript.getResultStdout().split("\\n")[0].trim());
         } else {
-            return entity.getAttribute(SgeNode.NUM_OF_PROCESSORS);
+            return entity.getAttribute(SgeNode.SGE_NUM_SLOTS_PER_NODE);
         }
 
     }
@@ -422,7 +427,9 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
 
             getArchScript.execute();
 
-            return getArchScript.getResultStdout().split("\n")[0];
+            String archOutput = getArchScript.getResultStdout().split("\n")[0];
+            entity.setAttribute(SgeNode.SGE_ARCH, archOutput);
+            return archOutput;
         } else {
             return entity.getAttribute(SgeNode.SGE_ARCH);
         }
@@ -452,19 +459,6 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
 //        return (exitStatus == 0);
 //    }
 
-    @Override
-    public void updatePE(String peName, Integer numOfProcessors) {
-        log.info("updating pe: {} with num of processors: {}", peName, numOfProcessors);
-
-        newScript("updating the number of processors in the PE")
-                .body.append(setEnv())
-                .body.append(format("%s -mattr pe slots %s %s", qconf(), numOfProcessors, peName))
-                .failOnNonZeroResultCode()
-                .execute();
-
-
-    }
-
 
     public void setupPE() {
 
@@ -478,7 +472,10 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
 
         DynamicTasks.queueIfPossible(newScript("creating new parallel environment")
                 .body.append(setEnv())
-                .body.append(format("%s -Ap %s/sge_pe.conf", qconf(), getRunDir())).newTask());
+                .body.append(format("%s -Ap %s/sge_pe.conf", qconf(), getRunDir()))
+                        //add the parallel environment to the queue
+                .body.append(format("qconf -mattr queue pe_list %s %s", getPeName(), "all.q"))
+                .newTask());
 
 
     }

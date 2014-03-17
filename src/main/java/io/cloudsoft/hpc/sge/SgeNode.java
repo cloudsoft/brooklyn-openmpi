@@ -58,6 +58,7 @@ public interface SgeNode extends SoftwareProcess {
             SoftwareProcess.DOWNLOAD_URL, "thing");
 
 
+    AttributeSensor<Integer> SGE_TOTAL_NUM_OF_SLOTS = Sensors.newIntegerSensor("sge.total.num.of.slots", "keeps track of the number of available cpus/slots in the pool, to be used in the master node");
     @SetFromFlag("downloadAddonUrls")
     BasicAttributeSensorAndConfigKey<Map<String, String>> DOWNLOAD_ADDON_URLS = new BasicAttributeSensorAndConfigKey<Map<String, String>>(
             SoftwareProcess.DOWNLOAD_ADDON_URLS, ImmutableMap.of(
@@ -65,12 +66,10 @@ public interface SgeNode extends SoftwareProcess {
 
 
     public static final MethodEffector<Void> UPDATE_HOSTS = new MethodEffector<Void>(SgeNode.class, "updateHosts");
-    public static final MethodEffector<Void> UPDATE_PE = new MethodEffector<Void>(SgeNode.class, "updatePE");
     public static final MethodEffector<Void> ADD_SLAVE = new MethodEffector<Void>(SgeNode.class, "addSlave");
     public static final MethodEffector<Void> REMOVE_SLAVE = new MethodEffector<Void>(SgeNode.class, "removeSlave");
-    public static final MethodEffector<Void> INSTALL_SLAVE_EXEC_HOST = new MethodEffector<Void>(SgeNode.class, "installSlaveExecHost");
 
-    AttributeSensor<Integer> NUM_OF_PROCESSORS = Sensors.newIntegerSensor("sge.num_of_processors", "attribute that shows the number of proceesors");
+    AttributeSensor<Integer> SGE_NUM_SLOTS_PER_NODE = Sensors.newIntegerSensor("sge.num.slots.per.node", "attribute that shows the number of cpu/slots per node");
 
     @SetFromFlag("SGEConfigTemplate")
     ConfigKey<String> SGE_CONFIG_TEMPLATE_URL = ConfigKeys.newStringConfigKey(
@@ -100,9 +99,6 @@ public interface SgeNode extends SoftwareProcess {
     public void addSlave(@EffectorParam(name = "slave") SgeNode slave);
 
     public String getClusterName();
-
-    @Effector(description = "Updates the Parallel environment and adds a new one if it doesn't exists")
-    public void updatePE(@EffectorParam(name = "peName") String peName, @EffectorParam(name = "numOfProcessors") Integer numOfProcessors);
 
     public String getPEname();
 
