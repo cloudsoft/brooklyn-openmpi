@@ -34,11 +34,11 @@ import static java.lang.String.format;
 public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements SgeDriver {
 
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(SgeSshDriver.class);
-    //protected final MpiSshMixin mpiMixin;
+    protected final MpiSshMixin mpiMixin;
 
     public SgeSshDriver(SgeNodeImpl entity, SshMachineLocation machine) {
         super(entity, machine);
-        //mpiMixin = new MpiSshMixin(this, machine);
+        mpiMixin = new MpiSshMixin(this, machine);
     }
 
     public static List<String> startNfsServer(String exportDir) {
@@ -48,15 +48,12 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
                 , "/etc/init.d/nfs-kernel-server start");
     }
 
-//    @Override
-//    protected String getLogFileLocation() {
-//        return String.format("%s/sgenode.log", getRunDir());
-//    }
 
     @Override
     public void install() {
 
         log.info("installing SGE on {}", entity.getId());
+
 
         List<String> genericInstallCommands = ImmutableList.of(BashCommands.installJava7OrFail(),
                 BashCommands.installPackage("build-essential"),
@@ -79,7 +76,6 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
 
                     // FIXME use same pattern as in Jboss7SshDriver.install, and Jboss7Serer.DOWNLOAD_URL
                     .body.append(BashCommands.commandsToDownloadUrlsAs(ImmutableList.of("http://dl.dropbox.com/u/47200624/respin/ge2011.11.tar.gz"), format("%s/ge.tar.gz", getInstallDir())))
-
                     // TODO fix io functionality first then move on to MPI
                     .body.append(format("tar xvfz %s/ge.tar.gz", getInstallDir()))
                     .body.append(format("mv %s/ge2011.11/ %s", getInstallDir(), getSgeRoot()))
@@ -88,7 +84,7 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
                     .body.append(format("chown %s %s", getSgeAdmin(), getSgeRoot()))
 
 
-                    //              .body.append(mpiMixin.installCommands())
+                    .body.append(mpiMixin.installCommands())
 
                     .execute();
 
@@ -96,9 +92,10 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
             newScript(INSTALLING)
                     .failOnNonZeroResultCode()
                     .body.append(genericInstallCommands)
+                    .body.append(BashCommands.commandsToDownloadUrlsAs(ImmutableList.of("http://downloads.cloudsoftcorp.com/openmpi-1.6.5.tar.gz"), format("%s/openmpi.tar.gz", getInstallDir())))
                     //install nfs common on slave
                     .body.append(BashCommands.installPackage("nfs-common"))
-                    //            .body.append(mpiMixin.installCommands())
+                    .body.append(mpiMixin.installCommands())
                     .execute();
         }
 
@@ -160,7 +157,7 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
                             //copy the sge_setup.conf to SGE_ROOT
                     .body.append(format("cp %s/sge_setup.conf %s/", getRunDir(), getSgeRoot()))
                     .body.append(format("cd %s && TERM=rxvt ./inst_sge -m -x -noremote -auto %s/sge_setup.conf", getSgeRoot(), getRunDir()))
-                            //          .body.append(mpiMixin.customizeCommands())
+                    .body.append(mpiMixin.customizeCommands())
                     .body.append(format("cat %s/sge_profile.conf >> /etc/bash.bashrc", getRunDir()))
                     .body.append(format("source /etc/bash.bashrc"))
                     .newTask());
@@ -202,6 +199,7 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
                     .body.append(format("cd %s && TERM=rxvt ./inst_sge -x -noremote -auto %s/sge_setup.conf", getSgeRoot(), getRunDir()))
                     .body.append(format("cat %s/sge_profile.conf >> /etc/bash.bashrc", getRunDir()))
                     .body.append(format("source /etc/bash.bashrc"))
+                    .body.append(mpiMixin.customizeCommands())
                     .newTask());
 
         }
@@ -241,9 +239,6 @@ public class SgeSshDriver extends VanillaSoftwareProcessSshDriver implements Sge
 
             String publicKey = attributeWhenReady(master, SgeNode.MASTER_PUBLIC_SSH_KEY);
             uploadPublicKey(publicKey);
-
-            //add the new node to the parallel environemtn
-            Integer numOfProcessors = getNumOfProcessors();
 
         }
     }

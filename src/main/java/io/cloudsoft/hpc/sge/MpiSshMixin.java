@@ -1,13 +1,8 @@
 package io.cloudsoft.hpc.sge;
 
-import brooklyn.entity.Entity;
-import brooklyn.entity.basic.EntityInternal;
-import brooklyn.entity.drivers.EntityDriver;
-import brooklyn.entity.drivers.downloads.DownloadResolver;
 import brooklyn.location.basic.SshMachineLocation;
-import brooklyn.management.ManagementContext;
+import brooklyn.util.ssh.BashCommands;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
@@ -20,33 +15,44 @@ public class MpiSshMixin {
 
     private final SgeSshDriver driver;
     private final SshMachineLocation machine;
+    private final String openMpiVersion = "openmpi-1.6.5";
 
     public MpiSshMixin(SgeSshDriver driver, SshMachineLocation machine) {
         this.driver = driver;
         this.machine = machine;
     }
 
+    //http://downloads.cloudsoftcorp.com/openmpi-1.6.5.tar.gz
+
     public List<String> installCommands() {
-        if (driver.isMaster()) {
-            Entity entity = driver.getEntity();
-            ManagementContext managementContext = ((EntityInternal) driver.getEntity()).getManagementContext();
 
-            String mpiVersion = entity.getConfig(SgeNode.MPI_VERSION);
-            DownloadResolver mpiDownloadResolver = managementContext.getEntityDownloadsManager().newDownloader(
-                    (EntityDriver) this, "mpi", ImmutableMap.of("addonversion", mpiVersion));
-            List<String> mpiUrls = mpiDownloadResolver.getTargets();
-            String mpiSaveAs = mpiDownloadResolver.getFilename();
+        //Entity entity = driver.getEntity();
+        //ManagementContext managementContext = ((EntityInternal) driver.getEntity()).getManagementContext();
 
-            return ImmutableList.<String>builder()
-                    .addAll(mpiUrls)
-                    .add(format("tar xvzf %s", mpiSaveAs))
-                    .build();
-        } else {
-            return ImmutableList.of();
-        }
+        //String mpiVersion = entity.getConfig(SgeNode.MPI_VERSION);
+        //DownloadResolver mpiDownloadResolver = managementContext.getEntityDownloadsManager().newDownloader(
+        //driver, "mpi", ImmutableMap.of("addonversion", mpiVersion));
+
+
+        //List<String> mpiUrls = mpiDownloadResolver.getTargets();
+        //String mpiSaveAs = mpiDownloadResolver.getFilename();
+
+
+        return ImmutableList.<String>builder()
+                //.addAll(mpiUrls)
+                .addAll(BashCommands.commandsToDownloadUrlsAs(ImmutableList.of("http://downloads.cloudsoftcorp.com/openmpi-1.6.5.tar.gz"), format("%s/openmpi.tar.gz", driver.getInstallDir())))
+                .add(format("mkdir -p /opt/"))
+                .add(format("tar -C %s -xvf %s/openmpi.tar.gz", driver.getInstallDir(),driver.getInstallDir()))
+                .add(format("mv %s/opt/%s /opt",driver.getInstallDir(),openMpiVersion))
+                .build();
+
     }
 
     public List<String> customizeCommands() {
-        return ImmutableList.of();
+        //add the paths to bashrc.
+        String openMpiPath = "/opt/" + openMpiVersion;
+
+        return ImmutableList.of(format("echo \"export PATH=$PATH:%s\" >> /etc/bash.bashrc", openMpiPath + "/bin"),
+                format("echo \"export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:%s\" >> /etc/bash.bashrc", openMpiPath + "/lib"));
     }
 }

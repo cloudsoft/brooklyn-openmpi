@@ -53,16 +53,17 @@ public interface SgeNode extends SoftwareProcess {
 
     ConfigKey<String> MPI_VERSION = ConfigKeys.newStringConfigKey("mpi.version", "version of MPI", "1.6.5");
 
+    //http://downloads.cloudsoftcorp.com/openmpi-1.6.5.tar.gz
     @SetFromFlag("downloadUrl")
     BasicAttributeSensorAndConfigKey<String> DOWNLOAD_URL = new BasicAttributeSensorAndConfigKey<String>(
-            SoftwareProcess.DOWNLOAD_URL, "thing");
+            SoftwareProcess.DOWNLOAD_URL, "http://dl.dropbox.com/u/47200624/respin/ge2011.11.tar.gz");
 
 
     AttributeSensor<Integer> SGE_TOTAL_NUM_OF_SLOTS = Sensors.newIntegerSensor("sge.total.num.of.slots", "keeps track of the number of available cpus/slots in the pool, to be used in the master node");
     @SetFromFlag("downloadAddonUrls")
     BasicAttributeSensorAndConfigKey<Map<String, String>> DOWNLOAD_ADDON_URLS = new BasicAttributeSensorAndConfigKey<Map<String, String>>(
             SoftwareProcess.DOWNLOAD_ADDON_URLS, ImmutableMap.of(
-            "mpi", "http://developers.cloudsoftcorp.com/brooklyn/repository/io-mpi/${addonversion}/openmpi-${addonversion}-withsge.tar.gz"));
+            "mpi", "http://downloads.cloudsoftcorp.com/openmpi-${addonversion}.tar.gz"));
 
 
     public static final MethodEffector<Void> UPDATE_HOSTS = new MethodEffector<Void>(SgeNode.class, "updateHosts");

@@ -53,4 +53,10 @@ public class MPIEntityTest extends BrooklynMgmtContextTestSupport {
 
         Entities.dumpInfo(app);
     }
+
+    @Test(groups = "methods")
+    public void testMixinDownloadResolver()
+    {
+
+    }
 }
