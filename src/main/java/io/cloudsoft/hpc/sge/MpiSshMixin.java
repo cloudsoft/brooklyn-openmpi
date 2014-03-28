@@ -42,8 +42,8 @@ public class MpiSshMixin {
                 //.addAll(mpiUrls)
                 .addAll(BashCommands.commandsToDownloadUrlsAs(ImmutableList.of("http://downloads.cloudsoftcorp.com/openmpi-1.6.5.tar.gz"), format("%s/openmpi.tar.gz", driver.getInstallDir())))
                 .add(format("mkdir -p /opt/"))
-                .add(format("tar -C %s -xvf %s/openmpi.tar.gz", driver.getInstallDir(),driver.getInstallDir()))
-                .add(format("mv %s/opt/%s /opt",driver.getInstallDir(),openMpiVersion))
+                .add(format("tar -C %s -xvf %s/openmpi.tar.gz", driver.getInstallDir(), driver.getInstallDir()))
+                .add(format("mv %s/opt/%s /opt", driver.getInstallDir(), openMpiVersion))
                 .build();
 
     }

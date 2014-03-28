@@ -19,7 +19,7 @@ public class MPIExample extends AbstractApplication {
 
     //@CatalogConfig(label="Initial Cluster Size (per location)")
     public static final ConfigKey<Integer> MPI_CLUSTER_SIZE = ConfigKeys.newConfigKey(
-            "MPI.cluster.initialSize", "Initial size of the MPI clusters", 2);
+            "MPI.cluster.initialSize", "Initial size of the MPI clusters", 4);
 
     public void init()
     {
