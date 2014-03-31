@@ -33,7 +33,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
     private AtomicBoolean masterSshgenerated = new AtomicBoolean();
 
     public void init() {
-        log.info("Initializing the Open-io.cloudsoft.hpc.mpi Cluster.");
+        log.info("Initializing the Open-MPI Cluster.");
         super.init();
 
         // TODO If choose to set mpi_hosts on each node, then do this:
@@ -77,7 +77,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
                 nodes.put(member, address);
                 setAttribute(MPI_CLUSTER_NODES, nodes);
 
-                log.info("Added new io.cloudsoft.hpc.mpi member to {}: {}; {}", new Object[]{this, member, address});
+                log.info("Added new MPI member to {}: {}; {}", new Object[]{this, member, address});
 
                 log.info("Updating mpi_hosts to master");
 
@@ -91,7 +91,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
             if (nodes != null) {
                 String address = nodes.remove(member);
                 setAttribute(MPI_CLUSTER_NODES, nodes);
-                log.info("Removed io.cloudsoft.hpc.mpi member from {}: {}; {}", new Object[]{this, member, address});
+                log.info("Removed MPI member from {}: {}; {}", new Object[]{this, member, address});
 
                 log.info("Updating mpi_hosts to all members");
 
@@ -195,7 +195,7 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
                                 "http://jedi.ks.uiuc.edu/~johns/raytracer/files/0.99b2/tachyon-0.99b2.tar.gz", "tachyon.tar.gz"),
                                 "tar xvfz tachyon.tar.gz",
                                 "cd tachyon/unix",
-                                "make linux-io.cloudsoft.hpc.mpi"));
+                                "make linux-mpi"));
 
                 log.info("installing tachyon ray tracing benchmark on Node: {}", loc.getId());
             }
@@ -212,15 +212,11 @@ public class MPIClusterImpl extends DynamicClusterImpl implements MPICluster {
         // TODO run different options for the ray tracing benchmark.
         masterLocation.
                 execScript("Executing the demo",
-                        ImmutableList.of(String.format("mpirun -np %s --hostfile ~/mpi_hosts ~/tachyon/compile/linux-io.cloudsoft.hpc.mpi/tachyon ~/tachyon/scenes/teapot.dat -format BMP -o teapot.%s.bmp > " +
+                        ImmutableList.of(String.format("mpirun -np %s --hostfile ~/mpi_hosts ~/tachyon/compile/linux-mpi/tachyon ~/tachyon/scenes/teapot.dat -format BMP -o teapot.%s.bmp > " +
                                 "~/raytraceout.%s",
                                 numOfNodes, numOfNodes, numOfNodes)));
 
-//        DynamicTasks.queueIfPossible(SshEffectorTasks.ssh(ImmutableList.of(String.format("mpirun -np %s --hostfile ~/mpi_hosts ~/tachyon/compile/linux-io.cloudsoft.hpc.mpi/tachyon ~/tachyon/scenes/teapot.dat -format BMP -o teapot.%s.bmp > " +
-//                "~/raytraceout.%s",numOfNodes,numOfNodes,numOfNodes)))
-//                .machine(masterLocation)
-//                .summary("Running the teapot ray tracing benchmark."))
-//        .orSubmitAndBlock(masterNode);
+
         // FIXME display results on console instead of copying a file across.
         log.info("copying results to local machine: {}", "raytraceout." + numOfNodes + "." + masterLocation.getId());
         masterLocation.copyFrom("raytraceout." + numOfNodes, "raytraceout." + numOfNodes + "." + masterLocation.getId());
