@@ -1,0 +1,14 @@
+name: My MPI Application
+location: mylocation
+
+services:
+
+- serviceType: io.cloudsoft.hpc.mpi.MPICluster
+  name: My MPI Cluster
+  brooklyn.config:
+    initialSize: 4
+    memberSpec:
+      $brooklyn:entitySpec:
+        type: io.cloudsoft.hpc.mpi.MPINode
+        brooklyn.config:
+          sge.pe.name: "mpi_pe"
