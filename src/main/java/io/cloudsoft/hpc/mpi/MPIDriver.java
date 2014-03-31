@@ -1,4 +1,4 @@
-package MPI;
+package io.cloudsoft.hpc.mpi;
 
 import brooklyn.entity.basic.SoftwareProcessDriver;
 

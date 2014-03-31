@@ -1,4 +1,4 @@
-package MPI;
+package io.cloudsoft.hpc.mpi;
 
 import brooklyn.entity.Entity;
 import brooklyn.entity.annotation.Effector;
@@ -25,13 +25,13 @@ public interface MPICluster extends DynamicCluster {
      *     (not implemented yet).
      */
 
-    AttributeSensor<Map<Entity,String>> MPI_CLUSTER_NODES = Sensors.newSensor(new TypeToken<Map<Entity,String>>(){},"mpicluster.nodes", "Hostnames of all active Open MPI nodes in the cluster (public hostname/IP)");
+    AttributeSensor<Map<Entity,String>> MPI_CLUSTER_NODES = Sensors.newSensor(new TypeToken<Map<Entity,String>>(){},"mpicluster.nodes", "Hostnames of all active Open io.cloudsoft.hpc.mpi nodes in the cluster (public hostname/IP)");
     public static final AttributeSensor<Boolean> MASTER_SSH_KEY_GENERATED = Sensors.newBooleanSensor("mpicluster.master_ssh_key_generated","senses if the master node SSH key has been configured");
     public static final AttributeSensor<MPINode> MASTER_NODE = Sensors.newSensor(MPINode.class,"mpicluster.masternode","the master node for the cluster");
 
     MethodEffector<Void> RUN_RAY_TRACING = new MethodEffector<Void>(MPICluster.class,"runRayTracingDemo");
 
     AttributeSensor<Boolean> RAY_TRACING_DEMO_INSTALLED = Sensors.newBooleanSensor("mpiccluster.raytracing.demo.installed","flag to indicate if the ray tracing demo has been installed");
-    @Effector(description = "Installs and runs a ray tracing app on my Open-MPI cluster")
+    @Effector(description = "Installs and runs a ray tracing app on my Open-io.cloudsoft.hpc.mpi cluster")
     void runRayTracingDemo(@EffectorParam(name="numOfNodes", description="the number of nodes I want to run the demo.") Integer numOfNodes);
 }

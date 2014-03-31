@@ -1,5 +1,5 @@
-import MPI.MPICluster;
-import MPI.MPINode;
+import io.cloudsoft.hpc.mpi.MPICluster;
+import io.cloudsoft.hpc.mpi.MPINode;
 import brooklyn.catalog.Catalog;
 import brooklyn.catalog.CatalogConfig;
 import brooklyn.config.ConfigKey;
@@ -7,7 +7,7 @@ import brooklyn.entity.basic.AbstractApplication;
 import brooklyn.entity.basic.ConfigKeys;
 import brooklyn.entity.proxying.EntitySpec;
 
-@Catalog(name="Open-MPI Cluster Demo", description="Deploy an Open-MPI cluster.")
+@Catalog(name="Open-io.cloudsoft.hpc.mpi Cluster Demo", description="Deploy an Open-io.cloudsoft.hpc.mpi cluster.")
 
 public class MPIExample extends AbstractApplication {
 

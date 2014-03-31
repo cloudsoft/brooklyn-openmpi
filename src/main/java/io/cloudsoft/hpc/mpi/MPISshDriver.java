@@ -1,4 +1,4 @@
-package MPI;
+package io.cloudsoft.hpc.mpi;
 
 import brooklyn.entity.Entity;
 import brooklyn.entity.basic.EntityInternal;
@@ -13,9 +13,6 @@ import brooklyn.util.ssh.BashCommands;
 import brooklyn.util.stream.Streams;
 import brooklyn.util.task.Tasks;
 import brooklyn.util.text.Strings;
-import com.google.common.base.Predicates;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.io.Files;
 import org.apache.commons.io.Charsets;
@@ -50,7 +47,7 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
                 BashCommands.installPackage("openmpi-common"),
                 BashCommands.installPackage("openmpi-doc"),
                 BashCommands.installPackage("libopenmpi-dev"),
-                BashCommands.commandToDownloadUrlAs("http://svn.open-mpi.org/svn/ompi/tags/v1.6-series/v1.6.4/examples/connectivity_c.c", connectivityTesterPath));
+                BashCommands.commandToDownloadUrlAs("http://svn.open-io.cloudsoft.hpc.mpi.org/svn/ompi/tags/v1.6-series/v1.6.4/examples/connectivity_c.c", connectivityTesterPath));
 
 
         connectivityTesterPath = Os.mergePathsUnix(getInstallDir(), "connectivity_c.c");
@@ -155,7 +152,7 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
                 .body.append("mkdir -p ~/.ssh/")
                 .body.append("chmod 700 ~/.ssh")
                 .body.append(BashCommands.executeCommandThenAsUserTeeOutputToFile("echo \"StrictHostKeyChecking no\"", "root", "/etc/ssh/ssh_config"))
-                .body.append("ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -C \"Open MPI\" -P \"\"")
+                .body.append("ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -C \"Open io.cloudsoft.hpc.mpi\" -P \"\"")
                 .body.append("cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys")
                 .body.append("chmod 600 ~/.ssh/authorized_keys")
                 .body.append("cp ~/.ssh/id_rsa.pub auth_keys.txt")

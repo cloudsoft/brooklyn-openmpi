@@ -1,4 +1,4 @@
-package MPI;
+package io.cloudsoft.hpc.mpi;
 
 
 import brooklyn.config.ConfigKey;
@@ -20,11 +20,11 @@ public interface MPINode extends SoftwareProcess {
 
     BasicAttributeSensorAndConfigKey<Boolean> MASTER_FLAG = new BasicAttributeSensorAndConfigKey<Boolean>(Boolean.class, "mpinode.masterFlag", "indicates whether this node is master", Boolean.FALSE);
 
-    // FIXME it is suggested that OPEN-MPI better off not ristricting the tcp range (http://www.open-mpi.org/community/lists/users/2006/04/1106.php)
-    //ConfigKey<String> TCP_PORTS_RANGE = ConfigKeys.newStringConfigKey("mpi.tcp.ports.range","range of ports to be used by the MPI processes e.g. 3000-3300");
-    ConfigKey<MPINode> MPI_MASTER = ConfigKeys.newConfigKey(MPINode.class, "mpi.master.node");
-    AttributeSensor<String> MASTER_PUBLIC_SSH_KEY = Sensors.newStringSensor("mpi.master.publicSshKey");
-    AttributeSensor<List<String>> MPI_HOSTS = Sensors.newSensor(new TypeToken<List<String>>() {}, "mpinode.mpihosts", "A list of all mpi hosts in the cluster");
+    // FIXME it is suggested that OPEN-io.cloudsoft.hpc.mpi better off not ristricting the tcp range (http://www.open-io.cloudsoft.hpc.mpi.org/community/lists/users/2006/04/1106.php)
+    //ConfigKey<String> TCP_PORTS_RANGE = ConfigKeys.newStringConfigKey("io.cloudsoft.hpc.mpi.tcp.ports.range","range of ports to be used by the io.cloudsoft.hpc.mpi processes e.g. 3000-3300");
+    ConfigKey<MPINode> MPI_MASTER = ConfigKeys.newConfigKey(MPINode.class, "io.cloudsoft.hpc.mpi.master.node");
+    AttributeSensor<String> MASTER_PUBLIC_SSH_KEY = Sensors.newStringSensor("io.cloudsoft.hpc.mpi.master.publicSshKey");
+    AttributeSensor<List<String>> MPI_HOSTS = Sensors.newSensor(new TypeToken<List<String>>() {}, "mpinode.mpihosts", "A list of all io.cloudsoft.hpc.mpi hosts in the cluster");
     MethodEffector<Void> UPDATE_HOSTS_FILE = new MethodEffector<Void>(MPINode.class, "updateHostsFile");
 
 
