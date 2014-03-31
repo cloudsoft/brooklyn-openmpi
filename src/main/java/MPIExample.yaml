@@ -1,0 +1,14 @@
+name: My SGE Application
+location: mylocation
+
+services:
+
+- serviceType: io.cloudsoft.hpc.sge.SgeCluster
+  name: My SGE Cluster
+  brooklyn.config:
+    initialSize: 4
+    memberSpec:
+      $brooklyn:entitySpec:
+        type: io.cloudsoft.hpc.sge.SgeNode
+        brooklyn.config:
+          sge.pe.name: "mpi_pe"
