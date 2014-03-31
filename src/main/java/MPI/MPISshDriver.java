@@ -129,33 +129,15 @@ public class MPISshDriver extends VanillaSoftwareProcessSshDriver implements MPI
 
             getMachine().copyTo(Streams.newInputStreamWithContents(myKey), "id_rsa.pub.txt");
 
-            //get master node
-            MPINode master = entity.getConfig(MPINode.MPI_MASTER);
-
             newScript("uploadMasterSshKey")
                     .body.append("mkdir -p ~/.ssh/")
                     .body.append("chmod 700 ~/.ssh/")
                     .body.append(BashCommands.executeCommandThenAsUserTeeOutputToFile("echo \"StrictHostKeyChecking no\"", "root", "/etc/ssh/ssh_config"))
-            // commented because we do not need slave ssh keys to be copied to master
-            //       .body.append("ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -C \"Open MPI\" -P \"\"")
-            //       .body.append("cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys")
                     .body.append("cat id_rsa.pub.txt >> ~/.ssh/authorized_keys")
                     .body.append("chmod 600 ~/.ssh/authorized_keys")
-            //       .body.append("cp ~/.ssh/id_rsa.pub id_rsa.pub." + entity.getId())
                     .failOnNonZeroResultCode()
                     .execute();
 
-
-            //adding slave key to master
-            //getMachine().copyFrom("id_rsa.pub." + entity.getId(), "id_rsa.pub." + entity.getId());
-
-            //SshMachineLocation loc = (SshMachineLocation) Iterables.find(master.getLocations(), Predicates.instanceOf(SshMachineLocation.class));
-            //loc.copyTo(new File("id_rsa.pub." + entity.getId()), "id_rsa.pub." + entity.getId());
-            //loc.execCommands("add new slave ssh key to master",
-            //        ImmutableList.of(
-            //                "chmod 700 ~/.ssh/",
-            //                "cat id_rsa.pub." + entity.getId() + " >> ~/.ssh/authorized_keys",
-            //                "chmod 600 ~/.ssh/authorized_keys"));
 
         } catch (IOException i) {
             log.debug("Error parsing the file {}", i.getMessage());
